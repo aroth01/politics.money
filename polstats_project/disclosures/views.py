@@ -892,6 +892,66 @@ def api_out_of_state_map(request):
     return JsonResponse(data, safe=False)
 
 
+@ratelimit(key="ip", rate="100/h", method="GET")
+def api_state_contributions(request, state_code):
+    """API endpoint to get all contributions from a specific state."""
+    import re
+
+    # Get year-filtered contributions
+    contributions = get_year_filtered_contributions(request)
+
+    # US state abbreviations
+    states = [
+        'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+        'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+        'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+        'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+        'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+    ]
+
+    # Pattern to find state abbreviation at end of address
+    state_pattern = r'\b(' + '|'.join(states) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
+
+    # Filter contributions using regex to match state at end of address
+    state_contributions_list = []
+    for contrib in contributions.select_related('report'):
+        if not contrib.address:
+            continue
+
+        # Try to extract state from address
+        match = re.search(state_pattern, contrib.address, re.IGNORECASE)
+        if match:
+            extracted_state = match.group(1).upper()
+            if extracted_state == state_code.upper():
+                state_contributions_list.append(contrib)
+
+    # Sort by date and amount
+    state_contributions_list.sort(key=lambda x: (x.date_received or '', x.amount or 0), reverse=True)
+
+    # Get all contributions (limit to 100 for performance)
+    contributions_data = []
+    for contrib in state_contributions_list[:100]:
+        contributions_data.append({
+            'contributor_name': contrib.contributor_name,
+            'address': contrib.address,
+            'amount': float(contrib.amount) if contrib.amount else 0,
+            'date': contrib.date_received.strftime('%Y-%m-%d') if contrib.date_received else '',
+            'organization': contrib.report.organization_name if contrib.report else '',
+            'report_id': contrib.report.report_id if contrib.report else '',
+        })
+
+    # Calculate summary stats
+    total = sum(float(c.amount or 0) for c in state_contributions_list)
+    count = len(state_contributions_list)
+
+    return JsonResponse({
+        'state': state_code,
+        'contributions': contributions_data,
+        'total_amount': total,
+        'total_count': count,
+    })
+
+
 def global_search(request):
     """Global search across all data."""
     query = request.GET.get('q', '').strip()

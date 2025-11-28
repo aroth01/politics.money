@@ -63,8 +63,8 @@
                         </thead>
                         <tbody>
                             {% for state in state_list|slice:":5" %}
-                            <tr>
-                                <td><span class="font-semibold">{{ state.state }}</span></td>
+                            <tr class="hover cursor-pointer" onclick="showStateDetail('{{ state.state }}')">
+                                <td><span class="font-semibold link link-primary">{{ state.state }}</span></td>
                                 <td class="text-success font-semibold">{{ state.total_amount|currency }}</td>
                                 <td><div class="badge badge-neutral badge-sm">{{ state.contributor_count }}</div></td>
                                 <td><div class="badge badge-outline badge-sm">{{ state.contribution_count }}</div></td>
@@ -148,9 +148,9 @@
                 </thead>
                 <tbody>
                     {% for state in state_list %}
-                    <tr>
+                    <tr class="hover cursor-pointer" onclick="showStateDetail('{{ state.state }}')">
                         <td class="font-semibold">{{ forloop.counter }}</td>
-                        <td><span class="font-semibold">{{ state.state }}</span></td>
+                        <td><span class="font-semibold link link-primary">{{ state.state }}</span></td>
                         <td class="text-success font-semibold">{{ state.total_amount|currency }}</td>
                         <td><div class="badge badge-neutral badge-sm">{{ state.contributor_count }}</div></td>
                         <td><div class="badge badge-outline badge-sm">{{ state.contribution_count }}</div></td>
@@ -162,6 +162,39 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<!-- State Detail Modal -->
+<dialog id="stateDetailModal" class="modal">
+    <div class="modal-box w-11/12 max-w-6xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="font-bold text-lg mb-2" id="stateDetailTitle">Loading...</h3>
+        <div class="stats shadow mb-4 w-full">
+            <div class="stat">
+                <div class="stat-title">Total Contributions</div>
+                <div class="stat-value text-primary text-2xl" id="stateDetailTotal">$0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-title">Number of Contributions</div>
+                <div class="stat-value text-2xl" id="stateDetailCount">0</div>
+            </div>
+        </div>
+        <div id="stateDetailContent">
+            <div class="flex justify-center items-center py-8">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
         </div>
         <div class="modal-action">
             <form method="dialog">
@@ -266,6 +299,65 @@
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson@3"></script>
 <script>
+// Function to show state detail modal
+function showStateDetail(stateCode) {
+    const modal = document.getElementById('stateDetailModal');
+    const title = document.getElementById('stateDetailTitle');
+    const content = document.getElementById('stateDetailContent');
+    const totalElement = document.getElementById('stateDetailTotal');
+    const countElement = document.getElementById('stateDetailCount');
+
+    // Get state name
+    const stateName = stateCodeToName[stateCode] || stateCode;
+    title.textContent = `Contributions from ${stateName} (${stateCode})`;
+
+    // Show loading
+    content.innerHTML = '<div class="flex justify-center items-center py-8"><span class="loading loading-spinner loading-lg"></span></div>';
+
+    // Show modal
+    modal.showModal();
+
+    // Fetch state data
+    fetch(`/api/out-of-state/${stateCode}/`)
+        .then(response => response.json())
+        .then(data => {
+            // Update stats
+            totalElement.textContent = '$' + data.total_amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            countElement.textContent = data.total_count.toLocaleString();
+
+            // Build table
+            let html = '<div class="overflow-x-auto"><table class="table table-sm table-zebra"><thead><tr>';
+            html += '<th>Contributor</th><th>Address</th><th>Amount</th><th>Date</th><th>Organization</th>';
+            html += '</tr></thead><tbody>';
+
+            if (data.contributions.length === 0) {
+                html += '<tr><td colspan="5" class="text-center text-gray-500 py-8">No contributions found</td></tr>';
+            } else {
+                data.contributions.forEach(contrib => {
+                    html += '<tr>';
+                    html += `<td class="font-medium">${contrib.contributor_name}</td>`;
+                    html += `<td class="text-sm">${contrib.address || 'N/A'}</td>`;
+                    html += `<td class="font-mono text-success">$${contrib.amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
+                    html += `<td class="text-sm">${contrib.date ? new Date(contrib.date).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'}) : 'N/A'}</td>`;
+                    html += `<td class="text-sm">${contrib.organization || 'N/A'}</td>`;
+                    html += '</tr>';
+                });
+            }
+
+            html += '</tbody></table></div>';
+
+            if (data.total_count > 100) {
+                html += '<div class="alert alert-info mt-4"><span>Showing first 100 contributions. Total: ' + data.total_count + '</span></div>';
+            }
+
+            content.innerHTML = html;
+        })
+        .catch(error => {
+            console.error('Error loading state data:', error);
+            content.innerHTML = '<div class="alert alert-error"><span>Error loading contribution data</span></div>';
+        });
+}
+
 // State code to name mapping
 const stateCodeToName = {
     'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
@@ -406,6 +498,15 @@ function createMap(contributionData) {
                         .attr('opacity', 1);
 
                     tooltip.style('opacity', 0);
+                })
+                .on('click', function(event, d) {
+                    const stateCode = stateNameToCode[d.properties.name];
+                    const amount = dataMap[stateCode] || 0;
+
+                    // Only show detail if state has contributions
+                    if (amount > 0) {
+                        showStateDetail(stateCode);
+                    }
                 });
 
             // Add legend

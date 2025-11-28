@@ -25,4 +25,5 @@ urlpatterns = [
     path('api/contributors/<path:contributor_name>/timeline/', views.api_contributor_timeline, name='api_contributor_timeline'),
     path('api/pacs/<path:organization_name>/sankey/', views.api_pac_sankey, name='api_pac_sankey'),
     path('api/out-of-state/map/', views.api_out_of_state_map, name='api_out_of_state_map'),
+    path('api/out-of-state/<str:state_code>/', views.api_state_contributions, name='api_state_contributions'),
 ]
