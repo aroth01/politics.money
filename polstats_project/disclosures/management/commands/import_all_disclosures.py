@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.db import transaction
 from datetime import datetime
 from decimal import Decimal
+import logging
 
 # Add the parent directory to the path to import our parser
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../../../'))
@@ -16,6 +17,11 @@ from ...models import DisclosureReport, Contribution, Expenditure
 
 class Command(BaseCommand):
     help = 'Batch import all Utah campaign finance disclosure reports by iterating through IDs'
+
+    def _log(self, message, level='INFO'):
+        """Log with timestamp."""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return f'[{timestamp}] {message}'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -197,15 +203,15 @@ class Command(BaseCommand):
         max_consecutive_failures = options['max_consecutive_failures']
         ignore_consecutive_failures = options['ignore_consecutive_failures']
 
-        self.stdout.write(self.style.SUCCESS(f'\nStarting batch import from ID {start_id}'))
+        self.stdout.write(self.style.SUCCESS(self._log(f'Starting batch import from ID {start_id}')))
         if end_id:
-            self.stdout.write(f'Will stop at ID {end_id}')
+            self.stdout.write(self._log(f'Will stop at ID {end_id}'))
         else:
             if ignore_consecutive_failures:
-                self.stdout.write('Will continue indefinitely (ignoring consecutive failures)')
+                self.stdout.write(self._log('Will continue indefinitely (ignoring consecutive failures)'))
             else:
-                self.stdout.write(f'Will continue until {max_consecutive_failures} consecutive invalid reports')
-        self.stdout.write(f'Delay between requests: {delay}s\n')
+                self.stdout.write(self._log(f'Will continue until {max_consecutive_failures} consecutive invalid reports'))
+        self.stdout.write(self._log(f'Delay between requests: {delay}s'))
 
         current_id = start_id
         consecutive_failures = 0
@@ -236,23 +242,23 @@ class Command(BaseCommand):
                 if success:
                     if 'skipped' in message:
                         total_skipped += 1
-                        self.stdout.write(self.style.WARNING(f'[{current_id}] {message}'))
+                        self.stdout.write(self.style.WARNING(self._log(f'[{current_id}] {message}')))
                     else:
                         total_imported += 1
                         consecutive_failures = 0  # Reset counter on success
-                        self.stdout.write(self.style.SUCCESS(f'[{current_id}] {message}'))
+                        self.stdout.write(self.style.SUCCESS(self._log(f'[{current_id}] {message}')))
                 else:
                     total_failed += 1
                     if is_invalid:
                         consecutive_failures += 1
                         self.stdout.write(
                             self.style.WARNING(
-                                f'[{current_id}] {message} (consecutive failures: {consecutive_failures})'
+                                self._log(f'[{current_id}] {message} (consecutive failures: {consecutive_failures})')
                             )
                         )
                     else:
                         # Don't count parsing errors as consecutive failures
-                        self.stdout.write(self.style.ERROR(f'[{current_id}] {message}'))
+                        self.stdout.write(self.style.ERROR(self._log(f'[{current_id}] {message}')))
 
                 # Move to next ID
                 current_id += 1
@@ -262,20 +268,20 @@ class Command(BaseCommand):
                     time.sleep(delay)
 
         except KeyboardInterrupt:
-            self.stdout.write(self.style.WARNING('\n\nImport interrupted by user'))
+            self.stdout.write(self.style.WARNING(self._log('Import interrupted by user')))
 
         # Print summary
         elapsed_time = time.time() - start_time
-        self.stdout.write(self.style.SUCCESS('\n' + '='*60))
-        self.stdout.write(self.style.SUCCESS('IMPORT SUMMARY'))
-        self.stdout.write(self.style.SUCCESS('='*60))
-        self.stdout.write(f'Total reports imported: {total_imported}')
-        self.stdout.write(f'Total reports skipped: {total_skipped}')
-        self.stdout.write(f'Total reports failed: {total_failed}')
-        self.stdout.write(f'Last ID processed: {current_id - 1}')
-        self.stdout.write(f'Time elapsed: {elapsed_time:.1f}s')
-        self.stdout.write(f'Average time per report: {elapsed_time / max(1, total_imported):.2f}s')
-        self.stdout.write(self.style.SUCCESS('='*60 + '\n'))
+        self.stdout.write(self.style.SUCCESS(self._log('='*60)))
+        self.stdout.write(self.style.SUCCESS(self._log('IMPORT SUMMARY')))
+        self.stdout.write(self.style.SUCCESS(self._log('='*60)))
+        self.stdout.write(self._log(f'Total reports imported: {total_imported}'))
+        self.stdout.write(self._log(f'Total reports skipped: {total_skipped}'))
+        self.stdout.write(self._log(f'Total reports failed: {total_failed}'))
+        self.stdout.write(self._log(f'Last ID processed: {current_id - 1}'))
+        self.stdout.write(self._log(f'Time elapsed: {elapsed_time:.1f}s'))
+        self.stdout.write(self._log(f'Average time per report: {elapsed_time / max(1, total_imported):.2f}s'))
+        self.stdout.write(self.style.SUCCESS(self._log('='*60)))
 
     def _get_decimal(self, value):
         """Convert value to Decimal, handling None."""
