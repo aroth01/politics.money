@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}About - {{ site_title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-8">
+    <!-- Header -->
+    <div class="text-center">
+        <h1 class="text-4xl font-bold mb-4">About {{ site_title }}</h1>
+        <p class="text-xl text-gray-600">Making Utah campaign finance data accessible and transparent</p>
+    </div>
+
+    <!-- Mission -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title text-2xl">Our Mission</h2>
+            <p class="text-lg">
+                This site aims to provide better data analytics about campaign finance in Utah. The current site at disclosures.utah.gov 
+                is a bit dated. And it just shows PDF report pages and doesn't really provide anything else than raw data. To help show 
+                better insights on money, hopefully we can show some of the motiviations in Utah politics. There are api endpoints for some of this 
+                data, but all API access is rate limited and may be refused at any time for any reason. If you do choose to use the API, please have some
+                method of contact in the User-Agent header so that we can reach out if there are any issues.
+            </p>
+        </div>
+    </div>
+
+    <!-- What We Do -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title text-2xl">What We Do</h2>
+            <div class="space-y-4">
+                <div>
+                    <h3 class="font-bold text-lg">Data Collection</h3>
+                    <p>
+                        We automatically collect and parse campaign finance disclosure reports from
+                        <a href="https://disclosures.utah.gov" class="link link-primary" target="_blank">disclosures.utah.gov</a>,
+                        the official Utah Lieutenant Governor's Office disclosure portal.
+                    </p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg">Easy Navigation</h3>
+                    <p>
+                        Browse reports by PACs, contributors, and expenditures. Use our search feature to find
+                        specific organizations, people, or transactions.
+                    </p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg">Visualizations</h3>
+                    <p>
+                        Interactive charts and graphs help you understand contribution patterns, spending trends,
+                        and financial flows at a glance.
+                    </p>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg">Out-of-State Analysis</h3>
+                    <p>
+                        See where out-of-state contributions are coming from with our interactive map and analysis tools.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Source -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title text-2xl">Data Source</h2>
+            <p>
+                All data on this site comes from official campaign finance disclosure reports filed with the
+                Utah Lieutenant Governor's Office and published at
+                <a href="https://disclosures.utah.gov" class="link link-primary" target="_blank">disclosures.utah.gov</a>.
+            </p>
+            <p class="mt-2">
+                We update our database regularly to ensure you have access to the latest filings. The last update
+                time is shown in the footer of every page.
+            </p>
+        </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="alert alert-info">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <div>
+            <h3 class="font-bold">Disclaimer</h3>
+            <div class="text-sm">
+                This is an independent project and is not affiliated with the Utah Lieutenant Governor's Office
+                or any government agency. While we strive for accuracy, this site is provided for informational
+                purposes only. For official records, please refer to
+                <a href="https://disclosures.utah.gov" class="link" target="_blank">disclosures.utah.gov</a>.
+            </div>
+            <div class="text-sm">
+                The data contained on this site is not subject to UCPA. We do not accept request to remove records.
+                Even if we did, your info is still publically stored online by the State of Utah.
+                We do not resell this data. It is provided to anyone for free for public use.
+            </div>
+        </div>
+    </div>
+
+    <!-- Technology -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title text-2xl">Technology</h2>
+            <p>
+                This site is built with open-source technologies:
+            </p>
+            <ul class="list-disc list-inside space-y-1 mt-2">
+                <li><strong>Django</strong> - Python web framework</li>
+                <li><strong>D3.js</strong> - Data visualization library</li>
+                <li><strong>Tailwind CSS & DaisyUI</strong> - Modern UI framework</li>
+                <li><strong>BeautifulSoup</strong> - HTML parsing for data collection</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

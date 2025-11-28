@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 
 {% block title %}{{ contributor_name }} - Utah Campaign Finance Disclosures{% endblock %}
 
@@ -25,13 +26,13 @@
     <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
         <div class="stat">
             <div class="stat-title">Total Contributed</div>
-            <div class="stat-value text-primary">${{ stats.total_amount|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-value text-primary">{{ stats.total_amount|currency }}</div>
             <div class="stat-desc">Across all organizations</div>
         </div>
         <div class="stat">
             <div class="stat-title">Number of Contributions</div>
             <div class="stat-value">{{ stats.contribution_count }}</div>
-            <div class="stat-desc">Average: ${{ stats.avg_amount|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-desc">Average: {{ stats.avg_amount|currency }}</div>
         </div>
         <div class="stat">
             <div class="stat-title">First Contribution</div>
@@ -74,7 +75,7 @@
                                     -
                                     {% endif %}
                                 </td>
-                                <td class="font-mono">${{ org.total|floatformat:2 }}</td>
+                                <td class="font-mono">{{ org.total|currency }}</td>
                                 <td>{{ org.count }}</td>
                             </tr>
                             {% empty %}
@@ -105,7 +106,7 @@
                             {% for year in by_year %}
                             <tr>
                                 <td>{{ year.year }}</td>
-                                <td class="font-mono">${{ year.total|floatformat:2 }}</td>
+                                <td class="font-mono">{{ year.total|currency }}</td>
                                 <td>{{ year.count }}</td>
                             </tr>
                             {% empty %}
@@ -145,7 +146,7 @@
                                     #{{ contribution.report.report_id }}
                                 </a>
                             </td>
-                            <td class="font-mono text-right">${{ contribution.amount|floatformat:2 }}</td>
+                            <td class="font-mono text-right">{{ contribution.amount|currency }}</td>
                             <td>
                                 <div class="flex gap-1">
                                     {% if contribution.is_in_kind %}

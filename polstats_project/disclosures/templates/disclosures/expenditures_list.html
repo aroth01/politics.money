@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 
 {% block title %}Expenditures - Utah Campaign Finance Disclosures{% endblock %}
 
@@ -51,7 +52,7 @@
                         <tr class="hover">
                             <td class="font-medium">{{ recipient.recipient_name }}</td>
                             <td class="text-sm">{{ recipient.purpose|truncatechars:50 }}</td>
-                            <td class="font-mono text-right font-bold">${{ recipient.total_amount|floatformat:2 }}</td>
+                            <td class="font-mono text-right font-bold">{{ recipient.total_amount|currency }}</td>
                             <td class="text-center">{{ recipient.expenditure_count }}</td>
                             <td class="text-sm">{{ recipient.last_expenditure|date:"M d, Y"|default:"-" }}</td>
                         </tr>

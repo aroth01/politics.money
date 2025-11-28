@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Utah Campaign Finance Disclosures{% endblock %}</title>
+    <title>{% block title %}{{ site_title }}{% endblock %}</title>
 
     <!-- DaisyUI & Tailwind CSS -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
@@ -35,6 +35,7 @@
                 </div>
                 <ul tabindex="0" class="menu menu-sm dropdown-content mt-3 z-[1] p-2 shadow bg-base-100 rounded-box w-52">
                     <li><a href="{% url 'disclosures:index' %}">Home</a></li>
+                    <li><a href="{% url 'disclosures:about' %}">About</a></li>
                     <li><a href="{% url 'disclosures:reports_list' %}">Reports</a></li>
                     <li><a href="{% url 'disclosures:pacs_list' %}">PACs</a></li>
                     <li><a href="{% url 'disclosures:contributors_list' %}">Contributors</a></li>
@@ -42,11 +43,12 @@
                     <li><a href="{% url 'disclosures:out_of_state' %}">Out of State</a></li>
                 </ul>
             </div>
-            <a href="{% url 'disclosures:index' %}" class="btn btn-ghost text-xl">Utah Finance</a>
+            <a href="{% url 'disclosures:index' %}" class="btn btn-ghost text-xl">{{ site_title }}</a>
         </div>
         <div class="navbar-center hidden lg:flex">
             <ul class="menu menu-horizontal px-1">
                 <li><a href="{% url 'disclosures:index' %}">Home</a></li>
+                <li><a href="{% url 'disclosures:about' %}">About</a></li>
                 <li><a href="{% url 'disclosures:reports_list' %}">Reports</a></li>
                 <li><a href="{% url 'disclosures:pacs_list' %}">PACs</a></li>
                 <li><a href="{% url 'disclosures:contributors_list' %}">Contributors</a></li>

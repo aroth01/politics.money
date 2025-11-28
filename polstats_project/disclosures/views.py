@@ -46,6 +46,11 @@ def get_year_filtered_expenditures(request):
     return Expenditure.objects.all()
 
 
+def about(request):
+    """About page."""
+    return render(request, 'disclosures/about.html')
+
+
 def index(request):
     """Homepage with overview statistics."""
     # Get year-filtered querysets

@@ -6,6 +6,7 @@ app_name = 'disclosures'
 urlpatterns = [
     # Main pages
     path('', views.index, name='index'),
+    path('about/', views.about, name='about'),
     path('reports/', views.reports_list, name='reports_list'),
     path('reports/<str:report_id>/', views.report_detail, name='report_detail'),
     path('contributors/', views.contributors_list, name='contributors_list'),

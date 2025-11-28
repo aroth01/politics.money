@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 
 {% block title %}Report {{ report.report_id }} - Utah Campaign Finance Disclosures{% endblock %}
 
@@ -16,7 +17,7 @@
     <!-- Header -->
     <div class="flex justify-between items-start">
         <div>
-            <h1 class="text-4xl font-bold">{{ report.organization_name|default:"Report "|add:report.report_id }}</h1>
+            <h1 class="text-4xl font-bold">{% if report.organization_name %}{{ report.organization_name }}{% else %}Report {{ report.report_id }}{% endif %}</h1>
             {% if report.organization_type %}
             <div class="mt-2">
                 <span class="badge badge-lg badge-primary">{{ report.organization_type }}</span>
@@ -44,21 +45,21 @@
     <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
         <div class="stat">
             <div class="stat-title">Beginning Balance</div>
-            <div class="stat-value text-lg">${{ report.balance_beginning|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-value text-lg">{{ report.balance_beginning|currency }}</div>
         </div>
         <div class="stat">
             <div class="stat-title">Total Contributions</div>
-            <div class="stat-value text-lg text-success">${{ contrib_stats.total|floatformat:2|default:"0.00" }}</div>
-            <div class="stat-desc">{{ contrib_stats.count }} transactions (avg: ${{ contrib_stats.avg|floatformat:2|default:"0.00" }})</div>
+            <div class="stat-value text-lg text-success">{{ contrib_stats.total|currency }}</div>
+            <div class="stat-desc">{{ contrib_stats.count }} transactions (avg: {{ contrib_stats.avg|currency }})</div>
         </div>
         <div class="stat">
             <div class="stat-title">Total Expenditures</div>
-            <div class="stat-value text-lg text-error">${{ exp_stats.total|floatformat:2|default:"0.00" }}</div>
-            <div class="stat-desc">{{ exp_stats.count }} transactions (avg: ${{ exp_stats.avg|floatformat:2|default:"0.00" }})</div>
+            <div class="stat-value text-lg text-error">{{ exp_stats.total|currency }}</div>
+            <div class="stat-desc">{{ exp_stats.count }} transactions (avg: {{ exp_stats.avg|currency }})</div>
         </div>
         <div class="stat">
             <div class="stat-title">Ending Balance</div>
-            <div class="stat-value text-lg text-primary">${{ report.ending_balance|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-value text-lg text-primary">{{ report.ending_balance|currency }}</div>
         </div>
     </div>
 
@@ -111,7 +112,7 @@
                             <td class="text-sm">{{ contribution.date_received|date:"M d, Y"|default:contribution.date_received_raw }}</td>
                             <td class="font-medium">{{ contribution.contributor_name }}</td>
                             <td class="text-sm">{{ contribution.address|truncatechars:40 }}</td>
-                            <td class="font-mono text-right">${{ contribution.amount|floatformat:2 }}</td>
+                            <td class="font-mono text-right">{{ contribution.amount|currency }}</td>
                             <td>
                                 <div class="flex gap-1">
                                     {% if contribution.is_in_kind %}
@@ -162,7 +163,7 @@
                             <td class="text-sm">{{ expenditure.date|date:"M d, Y"|default:expenditure.date_raw }}</td>
                             <td class="font-medium">{{ expenditure.recipient_name }}</td>
                             <td class="text-sm">{{ expenditure.purpose|truncatechars:40 }}</td>
-                            <td class="font-mono text-right">${{ expenditure.amount|floatformat:2 }}</td>
+                            <td class="font-mono text-right">{{ expenditure.amount|currency }}</td>
                             <td>
                                 <div class="flex gap-1">
                                     {% if expenditure.is_in_kind %}

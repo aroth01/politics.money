@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 
 {% block title %}Contributors - Utah Campaign Finance Disclosures{% endblock %}
 
@@ -55,7 +56,7 @@
                                 </a>
                             </td>
                             <td class="text-sm">{{ contributor.address|truncatechars:50 }}</td>
-                            <td class="font-mono text-right font-bold">${{ contributor.total_amount|floatformat:2 }}</td>
+                            <td class="font-mono text-right font-bold">{{ contributor.total_amount|currency }}</td>
                             <td class="text-center">{{ contributor.contribution_count }}</td>
                             <td class="text-sm">{{ contributor.last_contribution|date:"M d, Y"|default:"-" }}</td>
                         </tr>

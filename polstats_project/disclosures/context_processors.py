@@ -1,5 +1,6 @@
 """Context processors for disclosures app."""
 from django.db.models.functions import ExtractYear
+from django.conf import settings
 from .models import DisclosureReport
 
 
@@ -31,4 +32,5 @@ def year_filter(request):
         'available_years': list(available_years),
         'selected_year': selected_year,
         'last_updated': last_updated,
+        'site_title': settings.SITE_TITLE,
     }

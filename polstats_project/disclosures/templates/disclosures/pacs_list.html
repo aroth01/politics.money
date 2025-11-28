@@ -39,7 +39,6 @@
             <thead>
                 <tr>
                     <th>Organization Name</th>
-                    <th>Type</th>
                     <th>Total Contributions</th>
                     <th>Total Expenditures</th>
                     <th>Reports</th>
@@ -53,9 +52,6 @@
                         <a href="{% url 'disclosures:pac_detail' pac.organization_name %}" class="link link-primary font-semibold">
                             {{ pac.organization_name }}
                         </a>
-                    </td>
-                    <td>
-                        <div class="badge badge-outline">{{ pac.organization_type }}</div>
                     </td>
                     <td class="text-success font-semibold">
                         {{ pac.total_contributions|currency }}
@@ -76,7 +72,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center text-gray-500">No PACs found</td>
+                    <td colspan="5" class="text-center text-gray-500">No PACs found</td>
                 </tr>
                 {% endfor %}
             </tbody>
