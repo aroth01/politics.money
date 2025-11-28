@@ -1,0 +1,30 @@
+[Unit]
+Description=Utah Campaign Finance Report Importer (Sequential ID scan)
+After=network.target
+
+[Service]
+Type=oneshot
+User=polstats
+Group=polstats
+
+# Working directory
+WorkingDirectory=/var/www/polstats
+
+# Environment variables
+EnvironmentFile=/var/www/polstats/.env
+
+# Import all reports starting from ID 1, skipping existing
+# This is more reliable than the bulk_scrape command
+# It will stop after 10 consecutive invalid reports
+ExecStart=/var/www/polstats/venv/bin/python manage.py import_all_disclosures --start 1 --delay 1.5 --skip-existing --max-consecutive-failures 50
+
+# Logging
+StandardOutput=append:/var/log/polstats/scraper.log
+StandardError=append:/var/log/polstats/scraper-error.log
+
+# Timeout (scraping can take a while - disable timeout)
+TimeoutStartSec=0
+TimeoutStopSec=infinity
+
+[Install]
+WantedBy=multi-user.target

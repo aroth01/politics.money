@@ -1,5 +1,5 @@
 [Unit]
-Description=Utah Campaign Finance Bulk Scraper
+Description=Utah Campaign Finance Report Scraper (Reports Only)
 After=network.target
 
 [Service]
@@ -13,17 +13,17 @@ WorkingDirectory=/var/www/polstats
 # Environment variables
 EnvironmentFile=/var/www/polstats/.env
 
-# Run the import_all_disclosures command
-# This is more reliable than bulk_scrape
-ExecStart=/var/www/polstats/venv/bin/python manage.py import_all_disclosures --start 1 --delay 1.5 --skip-existing --max-consecutive-failures 100
+# Run the bulk scrape command - reports only, recent updates
+# This is much faster than entity discovery
+ExecStart=/var/www/polstats/venv/bin/python manage.py bulk_scrape --type reports --recent-only --delay 1.5
 
 # Logging
 StandardOutput=append:/var/log/polstats/scraper.log
 StandardError=append:/var/log/polstats/scraper-error.log
 
-# Timeout (scraping can take a while - disable stop timeout)
+# Timeout (scraping can take a while)
 TimeoutStartSec=0
-TimeoutStopSec=infinity
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target

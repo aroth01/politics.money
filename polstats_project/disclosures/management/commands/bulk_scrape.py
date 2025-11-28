@@ -89,7 +89,8 @@ class Command(BaseCommand):
             url = f'https://disclosures.utah.gov/Registration/EntityDetails/{entity_id}'
 
             try:
-                response = requests.head(url, timeout=10)  # Use HEAD for faster checking
+                # Use GET instead of HEAD - some servers don't respond well to HEAD
+                response = requests.get(url, timeout=30, allow_redirects=False)
 
                 if response.status_code == 200:
                     # Entity exists!
@@ -109,8 +110,14 @@ class Command(BaseCommand):
                         self.stdout.write(f'Stopped after {max_consecutive_failures} consecutive non-existent IDs')
                         break
 
-                time.sleep(self.delay / 2)  # Faster delay for HEAD requests
+                time.sleep(self.delay)  # Use full delay for GET requests
 
+            except requests.Timeout:
+                self.stdout.write(
+                    self.style.WARNING(f'Timeout checking entity {entity_id} - skipping')
+                )
+                # Don't count timeouts as consecutive failures - the server might just be slow
+                time.sleep(self.delay * 2)  # Wait longer after timeout
             except Exception as e:
                 self.stdout.write(
                     self.style.WARNING(f'Error checking entity {entity_id}: {str(e)}')
