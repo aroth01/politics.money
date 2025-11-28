@@ -1,0 +1,17 @@
+[Unit]
+Description=Run Utah Campaign Finance Scraper Daily
+Requires=scraper.service
+
+[Timer]
+# Run every day at 3:00 AM
+OnCalendar=daily
+OnCalendar=*-*-* 03:00:00
+
+# Run 5 minutes after boot if we missed a scheduled run
+Persistent=true
+
+# Randomize start time by up to 10 minutes to avoid load spikes
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

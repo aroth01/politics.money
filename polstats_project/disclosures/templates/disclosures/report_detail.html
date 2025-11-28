@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block title %}Report {{ report.report_id }} - Utah Campaign Finance Disclosures{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Breadcrumb -->
+    <div class="text-sm breadcrumbs">
+        <ul>
+            <li><a href="{% url 'disclosures:index' %}">Home</a></li>
+            <li><a href="{% url 'disclosures:reports_list' %}">Reports</a></li>
+            <li>{{ report.report_id }}</li>
+        </ul>
+    </div>
+
+    <!-- Header -->
+    <div class="flex justify-between items-start">
+        <div>
+            <h1 class="text-4xl font-bold">{{ report.organization_name|default:"Report "|add:report.report_id }}</h1>
+            {% if report.organization_type %}
+            <div class="mt-2">
+                <span class="badge badge-lg badge-primary">{{ report.organization_type }}</span>
+            </div>
+            {% endif %}
+            <p class="text-lg text-gray-600 mt-2">{{ report.report_type|default:report.title }}</p>
+            {% if report.begin_date and report.end_date %}
+            <p class="text-sm text-gray-500 mt-1">
+                Period: {{ report.begin_date|date:"M d, Y" }} - {{ report.end_date|date:"M d, Y" }}
+                {% if report.submit_date %}
+                | Submitted: {{ report.submit_date|date:"M d, Y" }}
+                {% endif %}
+            </p>
+            {% endif %}
+        </div>
+        <a href="{{ report.source_url }}" target="_blank" class="btn btn-outline btn-sm">
+            View Original
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+        </a>
+    </div>
+
+    <!-- Balance Summary Stats -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+            <div class="stat-title">Beginning Balance</div>
+            <div class="stat-value text-lg">${{ report.balance_beginning|floatformat:2|default:"0.00" }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Total Contributions</div>
+            <div class="stat-value text-lg text-success">${{ contrib_stats.total|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-desc">{{ contrib_stats.count }} transactions (avg: ${{ contrib_stats.avg|floatformat:2|default:"0.00" }})</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Total Expenditures</div>
+            <div class="stat-value text-lg text-error">${{ exp_stats.total|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-desc">{{ exp_stats.count }} transactions (avg: ${{ exp_stats.avg|floatformat:2|default:"0.00" }})</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Ending Balance</div>
+            <div class="stat-value text-lg text-primary">${{ report.ending_balance|floatformat:2|default:"0.00" }}</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Timeline Chart -->
+        <div class="card bg-base-200 shadow-xl lg:col-span-2">
+            <div class="card-body">
+                <h2 class="card-title">Daily Activity Timeline</h2>
+                <div id="timeline-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Top Contributors Chart -->
+        <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Top Contributors</h2>
+                <div id="contributors-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Top Expenditures Chart -->
+        <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Top Expenditure Recipients</h2>
+                <div id="expenditures-chart" class="chart-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs for Contributions and Expenditures -->
+    <div role="tablist" class="tabs tabs-lifted">
+        <input type="radio" name="my_tabs" role="tab" class="tab" aria-label="Contributions" checked />
+        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+            <h3 class="text-2xl font-bold mb-4">Contributions ({{ contrib_stats.count }})</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Contributor</th>
+                            <th>Address</th>
+                            <th>Amount</th>
+                            <th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contribution in contributions %}
+                        <tr>
+                            <td class="text-sm">{{ contribution.date_received|date:"M d, Y"|default:contribution.date_received_raw }}</td>
+                            <td class="font-medium">{{ contribution.contributor_name }}</td>
+                            <td class="text-sm">{{ contribution.address|truncatechars:40 }}</td>
+                            <td class="font-mono text-right">${{ contribution.amount|floatformat:2 }}</td>
+                            <td>
+                                <div class="flex gap-1">
+                                    {% if contribution.is_in_kind %}
+                                    <span class="badge badge-sm badge-info">In-Kind</span>
+                                    {% endif %}
+                                    {% if contribution.is_loan %}
+                                    <span class="badge badge-sm badge-warning">Loan</span>
+                                    {% endif %}
+                                    {% if contribution.is_amendment %}
+                                    <span class="badge badge-sm badge-secondary">Amendment</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-gray-500">No contributions</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if contrib_stats.count > 100 %}
+            <div class="alert alert-info mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Showing first 100 contributions. Total: {{ contrib_stats.count }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <input type="radio" name="my_tabs" role="tab" class="tab" aria-label="Expenditures" />
+        <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+            <h3 class="text-2xl font-bold mb-4">Expenditures ({{ exp_stats.count }})</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Recipient</th>
+                            <th>Purpose</th>
+                            <th>Amount</th>
+                            <th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expenditure in expenditures %}
+                        <tr>
+                            <td class="text-sm">{{ expenditure.date|date:"M d, Y"|default:expenditure.date_raw }}</td>
+                            <td class="font-medium">{{ expenditure.recipient_name }}</td>
+                            <td class="text-sm">{{ expenditure.purpose|truncatechars:40 }}</td>
+                            <td class="font-mono text-right">${{ expenditure.amount|floatformat:2 }}</td>
+                            <td>
+                                <div class="flex gap-1">
+                                    {% if expenditure.is_in_kind %}
+                                    <span class="badge badge-sm badge-info">In-Kind</span>
+                                    {% endif %}
+                                    {% if expenditure.is_loan %}
+                                    <span class="badge badge-sm badge-warning">Loan</span>
+                                    {% endif %}
+                                    {% if expenditure.is_amendment %}
+                                    <span class="badge badge-sm badge-secondary">Amendment</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-gray-500">No expenditures</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if exp_stats.count > 100 %}
+            <div class="alert alert-info mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Showing first 100 expenditures. Total: {{ exp_stats.count }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Fetch and render all charts
+const reportId = '{{ report.report_id }}';
+
+// Timeline chart
+fetch(`/api/reports/${reportId}/timeline/`)
+    .then(response => response.json())
+    .then(data => renderTimelineChart(data));
+
+// Top contributors chart
+fetch(`/api/reports/${reportId}/top-contributors/`)
+    .then(response => response.json())
+    .then(data => renderBarChart('contributors-chart', data, 'Contributions', '#3b82f6'));
+
+// Top expenditures chart
+fetch(`/api/reports/${reportId}/top-expenditures/`)
+    .then(response => response.json())
+    .then(data => renderBarChart('expenditures-chart', data, 'Expenditures', '#ef4444'));
+
+function renderTimelineChart(data) {
+    const container = document.getElementById('timeline-chart');
+    if (!container) return;
+
+    const margin = {top: 20, right: 80, bottom: 30, left: 60};
+    const width = container.offsetWidth - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    const svg = d3.select('#timeline-chart')
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Parse dates
+    const parseDate = d3.timeParse('%Y-%m-%d');
+    data.contributions.forEach(d => d.date = parseDate(d.date));
+    data.expenditures.forEach(d => d.date = parseDate(d.date));
+
+    if (data.contributions.length === 0 && data.expenditures.length === 0) {
+        svg.append('text')
+            .attr('x', width / 2)
+            .attr('y', height / 2)
+            .attr('text-anchor', 'middle')
+            .style('fill', '#999')
+            .text('No timeline data available');
+        return;
+    }
+
+    // Combine all dates and amounts
+    const allDates = [...data.contributions.map(d => d.date), ...data.expenditures.map(d => d.date)];
+    const allAmounts = [...data.contributions.map(d => d.amount), ...data.expenditures.map(d => d.amount)];
+
+    // Scales
+    const x = d3.scaleTime()
+        .domain(d3.extent(allDates))
+        .range([0, width]);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(allAmounts)])
+        .nice()
+        .range([height, 0]);
+
+    // Line generators
+    const line = d3.line()
+        .x(d => x(d.date))
+        .y(d => y(d.amount));
+
+    // Grid
+    svg.append('g')
+        .attr('class', 'grid')
+        .attr('opacity', 0.1)
+        .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+
+    // Axes
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x));
+
+    svg.append('g')
+        .call(d3.axisLeft(y).tickFormat(d => '$' + d3.format('.2s')(d)));
+
+    // Lines
+    if (data.contributions.length > 0) {
+        svg.append('path')
+            .datum(data.contributions)
+            .attr('fill', 'none')
+            .attr('stroke', '#3b82f6')
+            .attr('stroke-width', 2)
+            .attr('d', line);
+    }
+
+    if (data.expenditures.length > 0) {
+        svg.append('path')
+            .datum(data.expenditures)
+            .attr('fill', 'none')
+            .attr('stroke', '#ef4444')
+            .attr('stroke-width', 2)
+            .attr('d', line);
+    }
+
+    // Legend
+    const legend = svg.append('g')
+        .attr('transform', `translate(${width - 100}, 0)`);
+
+    legend.append('rect').attr('x', 0).attr('y', 0).attr('width', 10).attr('height', 10).attr('fill', '#3b82f6');
+    legend.append('text').attr('x', 15).attr('y', 10).text('Contributions').style('font-size', '12px');
+    legend.append('rect').attr('x', 0).attr('y', 20).attr('width', 10).attr('height', 10).attr('fill', '#ef4444');
+    legend.append('text').attr('x', 15).attr('y', 30).text('Expenditures').style('font-size', '12px');
+}
+
+function renderBarChart(elementId, data, label, color) {
+    const container = document.getElementById(elementId);
+    if (!container || data.length === 0) {
+        if (container) {
+            d3.select('#' + elementId)
+                .append('div')
+                .attr('class', 'flex items-center justify-center h-full text-gray-500')
+                .text('No data available');
+        }
+        return;
+    }
+
+    const margin = {top: 20, right: 20, bottom: 100, left: 60};
+    const width = container.offsetWidth - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    const svg = d3.select('#' + elementId)
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Scales
+    const x = d3.scaleBand()
+        .domain(data.map(d => d.name))
+        .range([0, width])
+        .padding(0.2);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.amount)])
+        .nice()
+        .range([height, 0]);
+
+    // Axes
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x))
+        .selectAll('text')
+        .attr('transform', 'rotate(-45)')
+        .style('text-anchor', 'end')
+        .each(function(d) {
+            const text = d3.select(this);
+            const words = d.split(' ');
+            text.text('');
+            if (d.length > 20) {
+                text.text(d.substring(0, 20) + '...');
+            } else {
+                text.text(d);
+            }
+        });
+
+    svg.append('g')
+        .call(d3.axisLeft(y).tickFormat(d => '$' + d3.format('.2s')(d)));
+
+    // Bars
+    svg.selectAll('.bar')
+        .data(data)
+        .enter()
+        .append('rect')
+        .attr('class', 'bar')
+        .attr('x', d => x(d.name))
+        .attr('y', d => y(d.amount))
+        .attr('width', x.bandwidth())
+        .attr('height', d => height - y(d.amount))
+        .attr('fill', color)
+        .attr('opacity', 0.8)
+        .on('mouseover', function() {
+            d3.select(this).attr('opacity', 1);
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('opacity', 0.8);
+        });
+}
+</script>
+{% endblock %}

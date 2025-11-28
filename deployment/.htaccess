@@ -1,0 +1,70 @@
+# .htaccess for Apache (if using Apache instead of Caddy)
+# Note: This requires mod_rewrite, mod_headers, and mod_proxy to be enabled
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Force HTTPS
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+# Security Headers
+Header always set X-Frame-Options "DENY"
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://d3js.org https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+Header always unset Server
+Header always unset X-Powered-By
+
+# Compress text files
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Cache static files
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpg "access plus 1 year"
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType application/pdf "access plus 1 month"
+    ExpiresByType image/x-icon "access plus 1 year"
+</IfModule>
+
+# Proxy pass to Django/Gunicorn (if using Apache as reverse proxy)
+<IfModule mod_proxy.c>
+    ProxyPreserveHost On
+    ProxyPass /static/ !
+    ProxyPass / http://127.0.0.1:8000/
+    ProxyPassReverse / http://127.0.0.1:8000/
+</IfModule>
+
+# Serve static files directly
+Alias /static/ /var/www/polstats/staticfiles/
+<Directory /var/www/polstats/staticfiles>
+    Require all granted
+</Directory>
+
+# Disable directory browsing
+Options -Indexes
+
+# Protect sensitive files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.env$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.sqlite3$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.py$">
+    Require all denied
+</FilesMatch>

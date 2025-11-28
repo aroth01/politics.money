@@ -1,0 +1,863 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}{{ organization_name }} - Political Action Committee{% endblock %}
+
+{% block extra_head %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/rowgroup/1.4.1/css/rowGroup.dataTables.min.css">
+
+<!-- jQuery (required for DataTables) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/rowgroup/1.4.1/js/dataTables.rowGroup.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<style>
+    /* DataTables styling to match DaisyUI */
+    .dataTables_wrapper {
+        font-family: inherit;
+    }
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        @apply input input-bordered input-sm;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        @apply btn btn-sm btn-ghost;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+        @apply btn-primary;
+    }
+    table.dataTable tbody tr.dtrg-group td {
+        background-color: oklch(var(--b2));
+        font-weight: bold;
+    }
+    .dt-buttons {
+        margin-bottom: 1rem;
+    }
+    .dt-button {
+        @apply btn btn-sm btn-outline;
+        margin-right: 0.5rem;
+    }
+    #sankeyChart {
+        min-height: 500px;
+        width: 100%;
+        overflow: visible;
+    }
+    #sankeyChart svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: 0 auto;
+        max-width: 100%;
+    }
+    .sankey-card {
+        overflow-x: auto;
+        overflow-y: visible;
+    }
+    .sankey-card .card-body {
+        overflow: visible;
+        padding: 1.5rem;
+    }
+
+    /* Enhanced card styling */
+    .card {
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    /* DataTables styling improvements - Light/Dark mode compatible */
+    table.dataTable {
+        border-collapse: separate !important;
+        border-spacing: 0;
+    }
+
+    table.dataTable thead th {
+        background: oklch(var(--b2));
+        color: oklch(var(--bc));
+        font-weight: 600;
+        border-bottom: 2px solid oklch(var(--b3));
+        padding: 12px 8px;
+    }
+
+    table.dataTable tbody tr {
+        background-color: oklch(var(--b1));
+        transition: background-color 0.2s;
+    }
+
+    table.dataTable tbody tr:hover {
+        background-color: oklch(var(--b2)) !important;
+    }
+
+    table.dataTable tbody tr.odd {
+        background-color: oklch(var(--b1));
+    }
+
+    table.dataTable tbody tr.even {
+        background-color: color-mix(in oklch, oklch(var(--b1)), oklch(var(--b2)) 30%);
+    }
+
+    table.dataTable tbody tr.odd:hover,
+    table.dataTable tbody tr.even:hover {
+        background-color: oklch(var(--b2)) !important;
+    }
+
+    table.dataTable tbody td {
+        border-bottom: 1px solid oklch(var(--b3));
+        padding: 10px 8px;
+        color: oklch(var(--bc));
+    }
+
+    /* Group header styling */
+    tr.group-header,
+    tr[data-group] {
+        background: oklch(var(--p)) !important;
+        color: oklch(var(--pc)) !important;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    tr.group-header:hover,
+    tr[data-group]:hover {
+        background: color-mix(in oklch, oklch(var(--p)), black 15%) !important;
+    }
+
+    tr.group-header td,
+    tr[data-group] td {
+        border-bottom: 2px solid color-mix(in oklch, oklch(var(--p)), black 20%) !important;
+    }
+
+    /* Tab styling */
+    .tabs-bordered .tab {
+        border-bottom-color: oklch(var(--b3));
+    }
+
+    .tabs-bordered .tab:checked {
+        border-bottom-color: oklch(var(--p));
+        color: oklch(var(--p));
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="breadcrumbs text-sm">
+        <ul>
+            <li><a href="{% url 'disclosures:index' %}">Home</a></li>
+            <li><a href="{% url 'disclosures:pacs_list' %}">PACs</a></li>
+            <li>{{ organization_name }}</li>
+        </ul>
+    </div>
+
+    <div class="flex justify-between items-start">
+        <div>
+            <h1 class="text-3xl font-bold">{{ organization_name }}</h1>
+            <div class="badge badge-outline mt-2">{{ organization_type }}</div>
+        </div>
+    </div>
+
+    {% if entity %}
+    <!-- Organization Details -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Organization Details</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-sm opacity-60">Entity ID</div>
+                    <div class="font-semibold">
+                        <a href="{{ entity.source_url }}" target="_blank" rel="noopener noreferrer" class="link link-primary">
+                            {{ entity.entity_id }}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="inline h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+                {% if entity.also_known_as %}
+                <div>
+                    <div class="text-sm opacity-60">Also Known As</div>
+                    <div class="font-semibold">{{ entity.also_known_as }}</div>
+                </div>
+                {% endif %}
+                {% if entity.date_created %}
+                <div>
+                    <div class="text-sm opacity-60">Date Created</div>
+                    <div class="font-semibold">{{ entity.date_created|date:"M d, Y" }}</div>
+                </div>
+                {% endif %}
+                {% if entity.entity_type %}
+                <div>
+                    <div class="text-sm opacity-60">Entity Type</div>
+                    <div class="font-semibold">{{ entity.entity_type }}</div>
+                </div>
+                {% endif %}
+                {% if entity.status %}
+                <div>
+                    <div class="text-sm opacity-60">Status</div>
+                    <div class="font-semibold">{{ entity.status }}</div>
+                </div>
+                {% endif %}
+                {% if entity.city or entity.state %}
+                <div>
+                    <div class="text-sm opacity-60">Location</div>
+                    <div class="font-semibold">
+                        {% if entity.city %}{{ entity.city }}{% endif %}{% if entity.city and entity.state %}, {% endif %}{% if entity.state %}{{ entity.state }}{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if entity.officers.exists %}
+            <div class="divider"></div>
+            <h3 class="font-bold mt-4">Officers & Committee Members</h3>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Title</th>
+                            <th>Contact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for officer in entity.officers.all %}
+                        <tr>
+                            <td>
+                                {{ officer.name }}
+                                {% if officer.is_treasurer %}
+                                <span class="badge badge-primary badge-sm ml-2">Treasurer</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ officer.title|default:"N/A" }}</td>
+                            <td>
+                                {% if officer.email %}
+                                    <a href="mailto:{{ officer.email }}" class="link link-primary text-sm">{{ officer.email }}</a>
+                                {% endif %}
+                                {% if officer.email and officer.phone %}<br>{% endif %}
+                                {% if officer.phone %}
+                                    <span class="text-sm">{{ officer.phone }}</span>
+                                {% endif %}
+                                {% if not officer.email and not officer.phone %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stats Cards -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+            <div class="stat-title">Total Contributions</div>
+            <div class="stat-value text-success">{{ stats.total_contributions|currency_int }}</div>
+            <div class="stat-desc">From {{ contrib_stats.count }} contributors</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Total Expenditures</div>
+            <div class="stat-value text-error">{{ stats.total_expenditures|currency_int }}</div>
+            <div class="stat-desc">To {{ exp_stats.count }} recipients</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Net Balance</div>
+            <div class="stat-value {% if net_balance >= 0 %}text-success{% else %}text-error{% endif %}">
+                {{ net_balance|currency_int }}
+            </div>
+            <div class="stat-desc">Contributions - Expenditures</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Reports Filed</div>
+            <div class="stat-value">{{ stats.report_count }}</div>
+            <div class="stat-desc">Latest: {{ stats.latest_report|date:"M d, Y" }}</div>
+        </div>
+    </div>
+
+    <!-- Cash Flow Sankey Diagram -->
+    <div class="card bg-base-100 shadow-xl sankey-card">
+        <div class="card-body">
+            <h2 class="card-title">Cash Flow Diagram</h2>            <p class="text-sm text-gray-500">Top 15 contributors and recipients</p>
+            <div id="sankeyChart" class="chart-container"></div>
+        </div>
+    </div>
+
+    <!-- Two Column Layout for Top Contributors and Recipients -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Top Contributors -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Top Contributors</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Contributor</th>
+                                <th class="text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contributor in top_contributors %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'disclosures:contributor_detail' contributor.contributor_name %}" class="link link-primary">
+                                        {{ contributor.contributor_name }}
+                                    </a>
+                                </td>
+                                <td class="text-right text-success font-semibold">
+                                    {{ contributor.total|currency }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-gray-500">No contributors found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Recipients -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Top Recipients</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Recipient</th>
+                                <th class="text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for recipient in top_recipients %}
+                            <tr>
+                                <td>{{ recipient.recipient_name }}</td>
+                                <td class="text-right text-error font-semibold">
+                                    {{ recipient.total|currency }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-gray-500">No recipients found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Reports -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Recent Reports</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Report Type</th>
+                            <th>Period</th>
+                            <th>Contributions</th>
+                            <th>Expenditures</th>
+                            <th>Balance</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in pac_reports %}
+                        <tr>
+                            <td>{{ report.report_type }}</td>
+                            <td>
+                                {% if report.begin_date and report.end_date %}
+                                    {{ report.begin_date|date:"M d, Y" }} - {{ report.end_date|date:"M d, Y" }}
+                                {% else %}
+                                    <span class="text-gray-400">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-success">
+                                {{ report.total_contributions|currency }}
+                            </td>
+                            <td class="text-error">
+                                {{ report.total_expenditures|currency }}
+                            </td>
+                            <td>
+                                {{ report.ending_balance|currency }}
+                            </td>
+                            <td>
+                                <a href="{% url 'disclosures:report_detail' report.report_id %}" class="btn btn-ghost btn-xs">View</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-gray-500">No reports found</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contributions and Expenditures with Tabs -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Transaction Details</h2>
+
+            <!-- Tabs -->
+            <div role="tablist" class="tabs tabs-bordered">
+                <input type="radio" name="transaction_tabs" role="tab" class="tab" aria-label="Contributions" checked />
+                <div role="tabpanel" class="tab-content pt-6">
+                    <p class="text-sm text-gray-500 mb-4">Grouped by contributor with expandable details</p>
+                    <div class="overflow-x-auto">
+                        <table class="display" id="contributionsTable" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>Contributor</th>
+                                    <th>Date</th>
+                                    <th>Address</th>
+                                    <th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for contribution in all_contributions %}
+                                <tr>
+                                    <td>{{ contribution.contributor_name }}</td>
+                                    <td data-order="{{ contribution.date_received|date:'Y-m-d' }}">
+                                        {% if contribution.date_received %}
+                                            {{ contribution.date_received|date:"M d, Y" }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ contribution.address|default:"N/A" }}</td>
+                                    <td data-order="{{ contribution.amount }}" data-amount="{{ contribution.amount }}">{{ contribution.amount|currency }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <input type="radio" name="transaction_tabs" role="tab" class="tab" aria-label="Expenditures" />
+                <div role="tabpanel" class="tab-content pt-6">
+                    <p class="text-sm text-gray-500 mb-4">Grouped by recipient with expandable details</p>
+                    <div class="overflow-x-auto">
+                        <table class="display" id="expendituresTable" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Recipient</th>
+                            <th>Date</th>
+                            <th>Purpose</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expenditure in all_expenditures %}
+                        <tr>
+                            <td>{{ expenditure.recipient_name }}</td>
+                            <td data-order="{{ expenditure.date|date:'Y-m-d' }}">
+                                {% if expenditure.date %}
+                                    {{ expenditure.date|date:"M d, Y" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>{{ expenditure.purpose|default:"N/A" }}</td>
+                            <td data-order="{{ expenditure.amount }}" data-amount="{{ expenditure.amount }}">{{ expenditure.amount|currency }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Fetch Sankey data and render
+    const year = new URLSearchParams(window.location.search).get('year') || '';
+    const apiUrl = "{% url 'disclosures:api_pac_sankey' organization_name %}" + (year ? `?year=${year}` : '');
+
+    console.log('Fetching Sankey data from:', apiUrl);
+
+    fetch(apiUrl)
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Received data:', data);
+            if (!data.nodes || !data.links) {
+                throw new Error('Invalid data structure');
+            }
+            if (data.nodes.length === 0) {
+                document.getElementById('sankeyChart').innerHTML = '<p class="text-center text-gray-500">No cash flow data available</p>';
+                return;
+            }
+            renderSankey(data);
+        })
+        .catch(error => {
+            console.error('Error loading Sankey data:', error);
+            document.getElementById('sankeyChart').innerHTML = `<p class="text-center text-error">Failed to load data: ${error.message}</p>`;
+        });
+
+    function renderSankey(data) {
+        const container = document.getElementById('sankeyChart');
+        // Use a fixed width for the viewBox, the SVG will scale
+        const width = 1200;
+
+        // Dynamic height based on number of nodes (minimum 500px, 30px per node)
+        const minHeight = 500;
+        const nodeHeight = 30;
+        const calculatedHeight = Math.max(minHeight, data.nodes.length * nodeHeight) + 50; // Add buffer
+        const height = calculatedHeight;
+        container.style.height = `${height}px`;
+
+        const margin = { top: 20, right: 200, bottom: 20, left: 200 };
+
+        // Clear any existing content
+        container.innerHTML = '';
+
+        // Create SVG with viewBox for responsive scaling
+        const svg = d3.select('#sankeyChart')
+            .append('svg')
+            .attr('viewBox', `0 0 ${width} ${height}`)
+            .attr('preserveAspectRatio', 'xMidYMin meet');
+
+        // Create Sankey generator with increased node padding for readability
+        const sankey = d3.sankey()
+            .nodeWidth(20)
+            .nodePadding(15)
+            .extent([[margin.left, margin.top], [width - margin.right, height - margin.bottom]]);
+
+        // Process data
+        const graph = sankey({
+            nodes: data.nodes.map(d => Object.assign({}, d)),
+            links: data.links.map(d => Object.assign({}, d))
+        });
+
+        // Color scale
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        // Add links
+        svg.append('g')
+            .selectAll('path')
+            .data(graph.links)
+            .join('path')
+            .attr('d', d3.sankeyLinkHorizontal())
+            .attr('stroke', d => color(d.source.name))
+            .attr('stroke-width', d => Math.max(1, d.width))
+            .attr('fill', 'none')
+            .attr('opacity', 0.5)
+            .append('title')
+            .text(d => `${d.source.name} → ${d.target.name}\n$${d.value.toLocaleString()}`);
+
+        // Add nodes
+        svg.append('g')
+            .selectAll('rect')
+            .data(graph.nodes)
+            .join('rect')
+            .attr('x', d => d.x0)
+            .attr('y', d => d.y0)
+            .attr('height', d => d.y1 - d.y0)
+            .attr('width', d => d.x1 - d.x0)
+            .attr('fill', d => color(d.name))
+            .append('title')
+            .text(d => `${d.name}\n$${d.value.toLocaleString()}`);
+
+        // Add labels with better readability
+        const labels = svg.append('g')
+            .selectAll('text')
+            .data(graph.nodes)
+            .join('text')
+            .attr('x', d => d.x0 < width / 2 ? d.x1 + 8 : d.x0 - 8)
+            .attr('y', d => (d.y1 + d.y0) / 2)
+            .attr('dy', '0.35em')
+            .attr('text-anchor', d => d.x0 < width / 2 ? 'start' : 'end')
+            .attr('font-size', '12px')
+            .attr('font-weight', '500')
+            .attr('fill', 'currentColor')
+            .style('pointer-events', 'none');
+
+        // Add text with line wrapping for long names
+        labels.each(function(d) {
+            const text = d3.select(this);
+            const maxLength = 40;
+            let displayName = d.name;
+
+            if (displayName.length > maxLength) {
+                displayName = displayName.substring(0, maxLength - 3) + '...';
+            }
+
+            text.text(displayName);
+
+            // Add tooltip on hover
+            text.append('title').text(d.name);
+        });
+
+        // Make nodes interactive with tooltips
+        svg.selectAll('rect')
+            .append('title')
+            .text(d => `${d.name}\nTotal: $${d.value.toLocaleString()}`);
+    }
+
+    // Initialize DataTables with grouping and export buttons
+    $(document).ready(function() {
+        // Contributions DataTable
+        const contributionsTable = $('#contributionsTable').DataTable({
+            order: [[0, 'asc']], // Order by contributor name
+            rowGroup: {
+                dataSrc: 0, // Group by contributor (first column)
+                startRender: function (rows, group) {
+                    // Return a placeholder - we'll calculate the sum in drawCallback
+                    const $tr = $('<tr/>')
+                        .addClass('group-header cursor-pointer hover:bg-base-200')
+                        .attr('data-group', group)
+                        .append('<td colspan="4" class="font-bold">' +
+                            '<span class="group-toggle">▼</span> ' +
+                            group + ' (' + rows.count() + ' transactions) - Total: <span class="group-total">$0.00</span>' +
+                            '</td>');
+                    return $tr[0]; // Return the raw DOM node, not jQuery object
+                }
+            },
+            dom: 'Bfrtip',
+            buttons: [
+                {
+                    extend: 'copy',
+                    text: 'Copy',
+                    className: 'btn btn-sm btn-outline'
+                },
+                {
+                    extend: 'csv',
+                    text: 'Export CSV',
+                    className: 'btn btn-sm btn-outline'
+                },
+                {
+                    extend: 'excel',
+                    text: 'Export Excel',
+                    className: 'btn btn-sm btn-outline'
+                },
+                {
+                    extend: 'pdf',
+                    text: 'Export PDF',
+                    className: 'btn btn-sm btn-outline',
+                    orientation: 'landscape'
+                },
+                {
+                    extend: 'print',
+                    text: 'Print',
+                    className: 'btn btn-sm btn-outline'
+                }
+            ],
+            pageLength: 25,
+            columnDefs: [
+                { targets: 0, className: 'hidden' }, // Hide the duplicate contributor name column
+                { targets: 3, className: 'text-right' } // Right-align amount column
+            ],
+            drawCallback: function() {
+                // RowGroup headers are added after drawCallback, so we need to use setTimeout
+                setTimeout(function() {
+                    // Find all group headers (they have our custom data-group attribute)
+                    const groupHeaders = $('#contributionsTable tbody tr[data-group]');
+
+                    // Calculate group totals after table is drawn
+                    groupHeaders.each(function() {
+                        const $groupHeader = $(this);
+                        const groupName = $groupHeader.attr('data-group');
+                        let sum = 0;
+
+                        // Find all rows belonging to this group
+                        let $nextRow = $groupHeader.next();
+                        while ($nextRow.length && !$nextRow.attr('data-group')) {
+                            // Find all td elements and look for the one with data-amount
+                            $nextRow.find('td').each(function() {
+                                const $td = $(this);
+                                const dataAmount = $td.attr('data-amount');
+                                if (dataAmount) {
+                                    const amount = parseFloat(dataAmount) || 0;
+                                    sum += amount;
+                                }
+                            });
+                            $nextRow = $nextRow.next();
+                        }
+
+                        // Update the total in the group header
+                        $groupHeader.find('.group-total').text('$' + sum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                    });
+
+                    // Add click handler for group headers to toggle expand/collapse
+                    $('#contributionsTable tbody').off('click', 'tr[data-group]').on('click', 'tr[data-group]', function() {
+                    const groupName = $(this).text().split(' (')[0].replace('▼ ', '').replace('▶ ', '');
+                    const rows = contributionsTable.rows({ search: 'applied' });
+                    let isCollapsed = $(this).hasClass('collapsed');
+
+                    rows.every(function() {
+                        const data = this.data();
+                        if (data[0] === groupName) {
+                            const node = $(this.node());
+                            if (isCollapsed) {
+                                node.show();
+                            } else {
+                                node.hide();
+                            }
+                        }
+                    });
+
+                        // Toggle the arrow indicator
+                        const toggle = $(this).find('.group-toggle');
+                        if (isCollapsed) {
+                            toggle.text('▼');
+                            $(this).removeClass('collapsed');
+                        } else {
+                            toggle.text('▶');
+                            $(this).addClass('collapsed');
+                        }
+                    });
+                }, 0); // End setTimeout
+            }
+        });
+
+        // Expenditures DataTable
+        const expendituresTable = $('#expendituresTable').DataTable({
+            order: [[0, 'asc']], // Order by recipient name
+            rowGroup: {
+                dataSrc: 0, // Group by recipient (first column)
+                startRender: function (rows, group) {
+                    // Return a placeholder - we'll calculate the sum in drawCallback
+                    const $tr = $('<tr/>')
+                        .addClass('group-header cursor-pointer hover:bg-base-200')
+                        .attr('data-group', group)
+                        .append('<td colspan="4" class="font-bold">' +
+                            '<span class="group-toggle">▼</span> ' +
+                            group + ' (' + rows.count() + ' transactions) - Total: <span class="group-total">$0.00</span>' +
+                            '</td>');
+                    return $tr[0]; // Return the raw DOM node, not jQuery object
+                }
+            },
+            dom: 'Bfrtip',
+            buttons: [
+                {
+                    extend: 'copy',
+                    text: 'Copy',
+                    className: 'btn btn-sm btn-outline'
+                },
+                {
+                    extend: 'csv',
+                    text: 'Export CSV',
+                    className: 'btn btn-sm btn-outline'
+                },
+                {
+                    extend: 'excel',
+                    text: 'Export Excel',
+                    className: 'btn btn-sm btn-outline'
+                },
+                {
+                    extend: 'pdf',
+                    text: 'Export PDF',
+                    className: 'btn btn-sm btn-outline',
+                    orientation: 'landscape'
+                },
+                {
+                    extend: 'print',
+                    text: 'Print',
+                    className: 'btn btn-sm btn-outline'
+                }
+            ],
+            pageLength: 25,
+            columnDefs: [
+                { targets: 0, className: 'hidden' }, // Hide the duplicate recipient name column
+                { targets: 3, className: 'text-right' } // Right-align amount column
+            ],
+            drawCallback: function() {
+                // RowGroup headers are added after drawCallback, so we need to use setTimeout
+                setTimeout(function() {
+                    // Find all group headers (they have our custom data-group attribute)
+                    const groupHeaders = $('#expendituresTable tbody tr[data-group]');
+
+                    // Calculate group totals after table is drawn
+                    groupHeaders.each(function() {
+                        const $groupHeader = $(this);
+                        const groupName = $groupHeader.attr('data-group');
+                        let sum = 0;
+
+                        // Find all rows belonging to this group
+                        let $nextRow = $groupHeader.next();
+                        while ($nextRow.length && !$nextRow.attr('data-group')) {
+                            // Find all td elements and look for the one with data-amount
+                            $nextRow.find('td').each(function() {
+                                const $td = $(this);
+                                if ($td.attr('data-amount')) {
+                                    const amount = parseFloat($td.attr('data-amount')) || 0;
+                                    sum += amount;
+                                }
+                            });
+                            $nextRow = $nextRow.next();
+                        }
+
+                        // Update the total in the group header
+                        $groupHeader.find('.group-total').text('$' + sum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                    });
+
+                    // Add click handler for group headers to toggle expand/collapse
+                    $('#expendituresTable tbody').off('click', 'tr[data-group]').on('click', 'tr[data-group]', function() {
+                    const groupName = $(this).text().split(' (')[0].replace('▼ ', '').replace('▶ ', '');
+                    const rows = expendituresTable.rows({ search: 'applied' });
+                    let isCollapsed = $(this).hasClass('collapsed');
+
+                    rows.every(function() {
+                        const data = this.data();
+                        if (data[0] === groupName) {
+                            const node = $(this.node());
+                            if (isCollapsed) {
+                                node.show();
+                            } else {
+                                node.hide();
+                            }
+                        }
+                    });
+
+                        // Toggle the arrow indicator
+                        const toggle = $(this).find('.group-toggle');
+                        if (isCollapsed) {
+                            toggle.text('▼');
+                            $(this).removeClass('collapsed');
+                        } else {
+                            toggle.text('▶');
+                            $(this).addClass('collapsed');
+                        }
+                    });
+                }, 0); // End setTimeout
+            }
+        });
+
+        // Handle tab switching - adjust DataTables column widths
+        $('input[name="transaction_tabs"]').on('change', function() {
+            setTimeout(function() {
+                contributionsTable.columns.adjust().draw();
+                expendituresTable.columns.adjust().draw();
+            }, 10);
+        });
+    });
+</script>
+{% endblock %}

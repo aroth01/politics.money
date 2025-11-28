@@ -1,0 +1,27 @@
+# Production requirements for Utah Campaign Finance Disclosures
+# Install with: pip install -r requirements.production.txt
+
+# Django
+Django>=4.2,<5.0
+
+# Web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Database (uncomment if using PostgreSQL in production)
+# psycopg2-binary>=2.9.9
+
+# WSGI server
+gunicorn>=21.2.0
+
+# Rate limiting
+django-ratelimit>=4.1.0
+
+# Environment variables
+python-decouple>=3.8
+
+# Security
+django-csp>=3.7
+
+# Monitoring (optional)
+# sentry-sdk>=1.38.0

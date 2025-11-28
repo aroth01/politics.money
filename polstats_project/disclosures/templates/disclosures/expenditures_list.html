@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Expenditures - Utah Campaign Finance Disclosures{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-4xl font-bold">Expenditure Recipients</h1>
+
+    <!-- Search -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <form method="get" class="flex gap-4">
+                <div class="form-control flex-1">
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ search }}"
+                        placeholder="Search by recipient name or purpose..."
+                        class="input input-bordered w-full"
+                    />
+                </div>
+                <button type="submit" class="btn btn-primary">Search</button>
+                {% if search %}
+                <a href="{% url 'disclosures:expenditures_list' %}" class="btn btn-ghost">Clear</a>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="text-sm text-gray-600">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} recipients
+    </div>
+
+    <!-- Expenditures Table -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body p-0">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Recipient</th>
+                            <th>Purpose</th>
+                            <th>Total Spent</th>
+                            <th>Transactions</th>
+                            <th>Last Expenditure</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for recipient in page_obj %}
+                        <tr class="hover">
+                            <td class="font-medium">{{ recipient.recipient_name }}</td>
+                            <td class="text-sm">{{ recipient.purpose|truncatechars:50 }}</td>
+                            <td class="font-mono text-right font-bold">${{ recipient.total_amount|floatformat:2 }}</td>
+                            <td class="text-center">{{ recipient.expenditure_count }}</td>
+                            <td class="text-sm">{{ recipient.last_expenditure|date:"M d, Y"|default:"-" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-8 text-gray-500">
+                                No expenditure recipients found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex justify-center">
+        <div class="join">
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% if search %}&search={{ search }}{% endif %}" class="join-item btn btn-sm">«</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}" class="join-item btn btn-sm">‹</a>
+            {% endif %}
+
+            <button class="join-item btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</button>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}" class="join-item btn btn-sm">›</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}" class="join-item btn btn-sm">»</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

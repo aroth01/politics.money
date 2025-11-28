@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.polstats.scraper</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/aaronroth/polstats/venv/bin/python</string>
+        <string>/Users/aaronroth/polstats/manage.py</string>
+        <string>bulk_scrape</string>
+        <string>--type=all</string>
+        <string>--delay=2.0</string>
+        <string>--max-pages=10</string>
+        <string>--update-existing</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/aaronroth/polstats</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/aaronroth/polstats/logs/scraper.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/aaronroth/polstats/logs/scraper-error.log</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/aaronroth/polstats/venv/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

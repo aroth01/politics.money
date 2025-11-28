@@ -1,0 +1,458 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Out of State Contributions - Utah Campaign Finance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">Out of State Contributions</h1>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+            <div class="stat-title">Total Out-of-State Amount</div>
+            <div class="stat-value text-primary">{{ total_out_of_state_amount|currency_int }}</div>
+            <div class="stat-desc">From non-Utah sources</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Total Contributions</div>
+            <div class="stat-value">{{ total_out_of_state_count }}</div>
+            <div class="stat-desc">Out-of-state donations</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">States Contributing</div>
+            <div class="stat-value text-accent">{{ state_list|length }}</div>
+            <div class="stat-desc">Unique states</div>
+        </div>
+    </div>
+
+    <!-- US Map Visualization -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Contribution Map by State</h2>
+            <div id="us-map" class="w-full" style="min-height: 500px;"></div>
+        </div>
+    </div>
+
+    <!-- State Breakdown and Contributors Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- State Breakdown Card -->
+        <div class="card bg-base-100 shadow-xl h-fit">
+            <div class="card-body">
+                <div class="flex justify-between items-center">
+                    <h2 class="card-title">State Breakdown</h2>
+                    <button class="btn btn-sm btn-primary" onclick="stateBreakdownModal.showModal()">
+                        View All
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                    </button>
+                </div>
+                <p class="text-sm opacity-60 mb-4">Top 5 states by contribution amount</p>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>State</th>
+                                <th>Total Amount</th>
+                                <th>Contributors</th>
+                                <th>Contributions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for state in state_list|slice:":5" %}
+                            <tr>
+                                <td><span class="font-semibold">{{ state.state }}</span></td>
+                                <td class="text-success font-semibold">{{ state.total_amount|currency }}</td>
+                                <td><div class="badge badge-neutral badge-sm">{{ state.contributor_count }}</div></td>
+                                <td><div class="badge badge-outline badge-sm">{{ state.contribution_count }}</div></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-gray-500">No out-of-state contributions found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Out-of-State Contributors Card -->
+        <div class="card bg-base-100 shadow-xl h-fit">
+            <div class="card-body">
+                <div class="flex justify-between items-center">
+                    <h2 class="card-title">Top Contributors</h2>
+                    <button class="btn btn-sm btn-primary" onclick="contributorsModal.showModal()">
+                        View All
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                    </button>
+                </div>
+                <p class="text-sm opacity-60 mb-4">Top 10 contributors by total amount</p>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Contributor</th>
+                                <th>Address</th>
+                                <th>Total Amount</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contributor in top_out_of_state|slice:":10" %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'disclosures:contributor_detail' contributor.contributor_name %}" class="link link-primary font-semibold">
+                                        {{ contributor.contributor_name }}
+                                    </a>
+                                </td>
+                                <td class="text-sm">{{ contributor.address|default:"N/A"|truncatewords:5 }}</td>
+                                <td class="text-success font-semibold">{{ contributor.total_amount|currency }}</td>
+                                <td><div class="badge badge-neutral badge-sm">{{ contributor.contribution_count }}</div></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-gray-500">No out-of-state contributors found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- State Breakdown Modal -->
+<dialog id="stateBreakdownModal" class="modal">
+    <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="font-bold text-lg mb-4">All States - Contribution Breakdown</h3>
+        <div class="overflow-x-auto">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>State</th>
+                        <th>Total Amount</th>
+                        <th>Contributors</th>
+                        <th>Contributions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for state in state_list %}
+                    <tr>
+                        <td class="font-semibold">{{ forloop.counter }}</td>
+                        <td><span class="font-semibold">{{ state.state }}</span></td>
+                        <td class="text-success font-semibold">{{ state.total_amount|currency }}</td>
+                        <td><div class="badge badge-neutral badge-sm">{{ state.contributor_count }}</div></td>
+                        <td><div class="badge badge-outline badge-sm">{{ state.contribution_count }}</div></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-gray-500">No out-of-state contributions found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<!-- Top Contributors Modal -->
+<dialog id="contributorsModal" class="modal">
+    <div class="modal-box w-11/12 max-w-5xl">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2">✕</button>
+        </form>
+        <h3 class="font-bold text-lg mb-4">All Out-of-State Contributors</h3>
+        <div class="overflow-x-auto">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Contributor</th>
+                        <th>Address</th>
+                        <th>Total Amount</th>
+                        <th>Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contributor in top_out_of_state %}
+                    <tr>
+                        <td class="font-semibold">{{ forloop.counter }}</td>
+                        <td>
+                            <a href="{% url 'disclosures:contributor_detail' contributor.contributor_name %}" class="link link-primary font-semibold">
+                                {{ contributor.contributor_name }}
+                            </a>
+                        </td>
+                        <td class="text-sm">{{ contributor.address|default:"N/A" }}</td>
+                        <td class="text-success font-semibold">{{ contributor.total_amount|currency }}</td>
+                        <td><div class="badge badge-neutral badge-sm">{{ contributor.contribution_count }}</div></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-gray-500">No out-of-state contributors found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-action">
+            <form method="dialog">
+                <button class="btn">Close</button>
+            </form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<style>
+    #us-map {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    #us-map svg {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .state {
+        stroke: oklch(var(--b3));
+        stroke-width: 1px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .state:hover {
+        stroke: oklch(var(--p));
+        stroke-width: 2px;
+    }
+
+    .tooltip {
+        position: absolute;
+        padding: 8px 12px;
+        background: oklch(var(--b1));
+        border: 1px solid oklch(var(--b3));
+        border-radius: 8px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s;
+        color: oklch(var(--bc));
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+    }
+</style>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson@3"></script>
+<script>
+// State code to name mapping
+const stateCodeToName = {
+    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+    'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+    'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+    'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+    'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+    'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+    'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+    'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+    'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+    'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+    'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+    'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+    'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia'
+};
+
+// Replace state codes with full names in the table
+document.addEventListener('DOMContentLoaded', function() {
+    const stateTable = document.getElementById('stateTable');
+    if (stateTable) {
+        const rows = stateTable.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const stateCell = row.querySelector('td:first-child span');
+            if (stateCell) {
+                const stateCode = stateCell.textContent.trim();
+                const stateName = stateCodeToName[stateCode];
+                if (stateName) {
+                    stateCell.textContent = stateName;
+                }
+            }
+        });
+    }
+
+    // Fetch map data
+    fetch("{% url 'disclosures:api_out_of_state_map' %}")
+        .then(response => response.json())
+        .then(data => {
+            createMap(data);
+        })
+        .catch(error => {
+            console.error('Error loading map data:', error);
+        });
+});
+
+function createMap(contributionData) {
+    const width = 960;
+    const height = 600;
+
+    // Create tooltip
+    const tooltip = d3.select('body')
+        .append('div')
+        .attr('class', 'tooltip');
+
+    // Create SVG
+    const svg = d3.select('#us-map')
+        .append('svg')
+        .attr('viewBox', `0 0 ${width} ${height}`)
+        .attr('preserveAspectRatio', 'xMidYMid meet');
+
+    // Create projection
+    const projection = d3.geoAlbersUsa()
+        .translate([width / 2, height / 2])
+        .scale(1200);
+
+    const path = d3.geoPath().projection(projection);
+
+    // Create a map of state codes to contribution amounts
+    const dataMap = {};
+    contributionData.forEach(d => {
+        dataMap[d.state] = d.amount;
+    });
+
+    // Get max amount for color scale
+    const maxAmount = d3.max(contributionData, d => d.amount) || 1;
+
+    // Create color scale
+    const colorScale = d3.scaleSequential()
+        .domain([0, maxAmount])
+        .interpolator(d3.interpolateBlues);
+
+    // Load US states TopoJSON
+    fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json')
+        .then(response => response.json())
+        .then(us => {
+            // State name to code mapping
+            const stateNameToCode = {
+                'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+                'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+                'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+                'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+                'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+                'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+                'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+                'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+                'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+                'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+                'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+                'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+                'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC'
+            };
+
+            // Draw states
+            svg.append('g')
+                .selectAll('path')
+                .data(topojson.feature(us, us.objects.states).features)
+                .enter()
+                .append('path')
+                .attr('class', 'state')
+                .attr('d', path)
+                .attr('fill', d => {
+                    const stateCode = stateNameToCode[d.properties.name];
+                    const amount = dataMap[stateCode] || 0;
+                    return amount > 0 ? colorScale(amount) : 'oklch(var(--b2))';
+                })
+                .on('mouseover', function(event, d) {
+                    const stateCode = stateNameToCode[d.properties.name];
+                    const amount = dataMap[stateCode] || 0;
+
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('opacity', 0.7);
+
+                    tooltip
+                        .style('opacity', 1)
+                        .html(`
+                            <strong>${d.properties.name} (${stateCode})</strong><br>
+                            Contributions: $${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                        `)
+                        .style('left', (event.pageX + 10) + 'px')
+                        .style('top', (event.pageY - 28) + 'px');
+                })
+                .on('mouseout', function() {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('opacity', 1);
+
+                    tooltip.style('opacity', 0);
+                });
+
+            // Add legend
+            const legendWidth = 300;
+            const legendHeight = 10;
+
+            const legend = svg.append('g')
+                .attr('transform', `translate(${width - legendWidth - 50}, ${height - 50})`);
+
+            // Create gradient for legend
+            const defs = svg.append('defs');
+            const linearGradient = defs.append('linearGradient')
+                .attr('id', 'legend-gradient');
+
+            linearGradient.selectAll('stop')
+                .data(d3.range(0, 1.1, 0.1))
+                .enter()
+                .append('stop')
+                .attr('offset', d => `${d * 100}%`)
+                .attr('stop-color', d => colorScale(d * maxAmount));
+
+            legend.append('rect')
+                .attr('width', legendWidth)
+                .attr('height', legendHeight)
+                .style('fill', 'url(#legend-gradient)');
+
+            legend.append('text')
+                .attr('x', 0)
+                .attr('y', -5)
+                .style('font-size', '12px')
+                .style('fill', 'oklch(var(--bc))')
+                .text('$0');
+
+            legend.append('text')
+                .attr('x', legendWidth)
+                .attr('y', -5)
+                .attr('text-anchor', 'end')
+                .style('font-size', '12px')
+                .style('fill', 'oklch(var(--bc))')
+                .text('$' + maxAmount.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0}));
+        })
+        .catch(error => {
+            console.error('Error loading US map:', error);
+            d3.select('#us-map').append('div')
+                .attr('class', 'alert alert-error')
+                .text('Error loading map visualization');
+        });
+}
+</script>
+{% endblock %}

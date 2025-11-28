@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Home - Utah Campaign Finance Disclosures{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Hero Section -->
+    <div class="hero bg-base-200 rounded-lg">
+        <div class="hero-content text-center py-12">
+            <div class="max-w-md">
+                <h1 class="text-5xl font-bold">Utah Campaign Finance</h1>
+                <p class="py-6">Track and analyze campaign finance disclosures from Utah political organizations</p>
+                <a href="{% url 'disclosures:reports_list' %}" class="btn btn-primary">Browse Reports</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+            <div class="stat-figure text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+            </div>
+            <div class="stat-title">Total Reports</div>
+            <div class="stat-value text-primary">{{ stats.total_reports|default:0 }}</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-figure text-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                </svg>
+            </div>
+            <div class="stat-title">Total Contributions</div>
+            <div class="stat-value text-secondary">{{ stats.total_contribution_amount|currency_int }}</div>
+            <div class="stat-desc">{{ stats.total_contributions }} transactions</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-figure text-accent">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+            </div>
+            <div class="stat-title">Total Expenditures</div>
+            <div class="stat-value text-accent">{{ stats.total_expenditure_amount|currency_int }}</div>
+            <div class="stat-desc">{{ stats.total_expenditures }} transactions</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Reports -->
+        <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Recent Reports</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Title</th>
+                                <th>Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in recent_reports %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'disclosures:report_detail' report.report_id %}" class="link link-primary">
+                                        {{ report.report_id }}
+                                    </a>
+                                </td>
+                                <td>{{ report.title|truncatechars:40 }}</td>
+                                <td class="font-mono">{{ report.ending_balance|currency }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-gray-500">No reports yet</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-actions justify-end">
+                    <a href="{% url 'disclosures:reports_list' %}" class="btn btn-sm btn-primary">View All</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Contributors -->
+        <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Top Contributors</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Total</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contributor in top_contributors %}
+                            <tr>
+                                <td>{{ contributor.contributor_name|truncatechars:30 }}</td>
+                                <td class="font-mono">{{ contributor.total|currency }}</td>
+                                <td>{{ contributor.count }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-gray-500">No data yet</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-actions justify-end">
+                    <a href="{% url 'disclosures:contributors_list' %}" class="btn btn-sm btn-primary">View All</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Recipients -->
+        <div class="card bg-base-200 shadow-xl lg:col-span-2">
+            <div class="card-body">
+                <h2 class="card-title">Top Expenditure Recipients</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Recipient</th>
+                                <th>Total Amount</th>
+                                <th>Transaction Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for recipient in top_recipients %}
+                            <tr>
+                                <td>{{ recipient.recipient_name }}</td>
+                                <td class="font-mono">{{ recipient.total|currency }}</td>
+                                <td>{{ recipient.count }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-gray-500">No data yet</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-actions justify-end">
+                    <a href="{% url 'disclosures:expenditures_list' %}" class="btn btn-sm btn-primary">View All</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Timeline Chart -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Contributions & Expenditures Over Time</h2>
+            <div id="global-timeline-chart" class="chart-container"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Fetch global timeline data and render chart
+fetch('{% url "disclosures:api_global_timeline" %}')
+    .then(response => response.json())
+    .then(data => {
+        renderTimelineChart('global-timeline-chart', data);
+    });
+
+function renderTimelineChart(elementId, data) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
+
+    // Simple D3 line chart
+    const margin = {top: 20, right: 80, bottom: 30, left: 60};
+    const width = container.offsetWidth - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    const svg = d3.select('#' + elementId)
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Parse dates
+    const parseDate = d3.timeParse('%Y-%m-%d');
+    data.contributions.forEach(d => d.date = parseDate(d.date));
+    data.expenditures.forEach(d => d.date = parseDate(d.date));
+
+    // Combine all dates to get domain
+    const allDates = [...data.contributions.map(d => d.date), ...data.expenditures.map(d => d.date)];
+    const allAmounts = [...data.contributions.map(d => d.amount), ...data.expenditures.map(d => d.amount)];
+
+    // Scales
+    const x = d3.scaleTime()
+        .domain(d3.extent(allDates))
+        .range([0, width]);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(allAmounts)])
+        .nice()
+        .range([height, 0]);
+
+    // Line generators
+    const contributionLine = d3.line()
+        .x(d => x(d.date))
+        .y(d => y(d.amount));
+
+    const expenditureLine = d3.line()
+        .x(d => x(d.date))
+        .y(d => y(d.amount));
+
+    // Grid lines
+    svg.append('g')
+        .attr('class', 'grid')
+        .attr('opacity', 0.1)
+        .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+
+    // Axes
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x));
+
+    svg.append('g')
+        .call(d3.axisLeft(y).tickFormat(d => '$' + d3.format('.2s')(d)));
+
+    // Lines
+    if (data.contributions.length > 0) {
+        svg.append('path')
+            .datum(data.contributions)
+            .attr('fill', 'none')
+            .attr('stroke', '#3b82f6')
+            .attr('stroke-width', 2)
+            .attr('d', contributionLine);
+    }
+
+    if (data.expenditures.length > 0) {
+        svg.append('path')
+            .datum(data.expenditures)
+            .attr('fill', 'none')
+            .attr('stroke', '#ef4444')
+            .attr('stroke-width', 2)
+            .attr('d', expenditureLine);
+    }
+
+    // Legend
+    const legend = svg.append('g')
+        .attr('transform', `translate(${width - 100}, 0)`);
+
+    legend.append('rect')
+        .attr('x', 0)
+        .attr('y', 0)
+        .attr('width', 10)
+        .attr('height', 10)
+        .attr('fill', '#3b82f6');
+
+    legend.append('text')
+        .attr('x', 15)
+        .attr('y', 10)
+        .text('Contributions')
+        .style('font-size', '12px');
+
+    legend.append('rect')
+        .attr('x', 0)
+        .attr('y', 20)
+        .attr('width', 10)
+        .attr('height', 10)
+        .attr('fill', '#ef4444');
+
+    legend.append('text')
+        .attr('x', 15)
+        .attr('y', 30)
+        .text('Expenditures')
+        .style('font-size', '12px');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}{{ contributor_name }} - Utah Campaign Finance Disclosures{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Breadcrumb -->
+    <div class="text-sm breadcrumbs">
+        <ul>
+            <li><a href="{% url 'disclosures:index' %}">Home</a></li>
+            <li><a href="{% url 'disclosures:contributors_list' %}">Contributors</a></li>
+            <li>{{ contributor_name }}</li>
+        </ul>
+    </div>
+
+    <!-- Header -->
+    <div>
+        <h1 class="text-4xl font-bold">{{ contributor_name }}</h1>
+        {% if address %}
+        <p class="text-lg text-gray-600 mt-2">{{ address }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+            <div class="stat-title">Total Contributed</div>
+            <div class="stat-value text-primary">${{ stats.total_amount|floatformat:2|default:"0.00" }}</div>
+            <div class="stat-desc">Across all organizations</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Number of Contributions</div>
+            <div class="stat-value">{{ stats.contribution_count }}</div>
+            <div class="stat-desc">Average: ${{ stats.avg_amount|floatformat:2|default:"0.00" }}</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">First Contribution</div>
+            <div class="stat-value text-lg">{{ stats.first_contribution|date:"M d, Y"|default:"-" }}</div>
+            <div class="stat-desc">Last: {{ stats.last_contribution|date:"M d, Y"|default:"-" }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Contribution Timeline -->
+        <div class="card bg-base-200 shadow-xl lg:col-span-2">
+            <div class="card-body">
+                <h2 class="card-title">Contribution Timeline</h2>
+                <div id="timeline-chart" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- By Organization -->
+        <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Contributions by Organization</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Organization</th>
+                                <th>Type</th>
+                                <th>Total</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for org in by_organization %}
+                            <tr>
+                                <td>{{ org.report__organization_name|default:"-" }}</td>
+                                <td>
+                                    {% if org.report__organization_type %}
+                                    <span class="badge badge-xs">{{ org.report__organization_type }}</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td class="font-mono">${{ org.total|floatformat:2 }}</td>
+                                <td>{{ org.count }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-gray-500">No data</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- By Year -->
+        <div class="card bg-base-200 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Contributions by Year</h2>
+                <div class="overflow-x-auto">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Year</th>
+                                <th>Total</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for year in by_year %}
+                            <tr>
+                                <td>{{ year.year }}</td>
+                                <td class="font-mono">${{ year.total|floatformat:2 }}</td>
+                                <td>{{ year.count }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-gray-500">No data</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Contributions Table -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">All Contributions</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Organization</th>
+                            <th>Report</th>
+                            <th>Amount</th>
+                            <th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contribution in contributions %}
+                        <tr>
+                            <td class="text-sm">{{ contribution.date_received|date:"M d, Y"|default:contribution.date_received_raw }}</td>
+                            <td>{{ contribution.report.organization_name|default:contribution.report.title|default:"-" }}</td>
+                            <td>
+                                <a href="{% url 'disclosures:report_detail' contribution.report.report_id %}" class="link link-primary text-sm">
+                                    #{{ contribution.report.report_id }}
+                                </a>
+                            </td>
+                            <td class="font-mono text-right">${{ contribution.amount|floatformat:2 }}</td>
+                            <td>
+                                <div class="flex gap-1">
+                                    {% if contribution.is_in_kind %}
+                                    <span class="badge badge-xs badge-info">In-Kind</span>
+                                    {% endif %}
+                                    {% if contribution.is_loan %}
+                                    <span class="badge badge-xs badge-warning">Loan</span>
+                                    {% endif %}
+                                    {% if contribution.is_amendment %}
+                                    <span class="badge badge-xs badge-secondary">Amendment</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-gray-500">No contributions</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if stats.contribution_count > 100 %}
+            <div class="alert alert-info mt-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Showing first 100 contributions. Total: {{ stats.contribution_count }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Fetch and render timeline chart
+const contributorName = '{{ contributor_name|escapejs }}';
+
+fetch(`/api/contributors/${encodeURIComponent(contributorName)}/timeline/`)
+    .then(response => response.json())
+    .then(data => renderContributorTimeline(data));
+
+function renderContributorTimeline(data) {
+    const container = document.getElementById('timeline-chart');
+    if (!container || data.length === 0) {
+        if (container) {
+            container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-500">No timeline data available</div>';
+        }
+        return;
+    }
+
+    const margin = {top: 20, right: 20, bottom: 50, left: 60};
+    const width = container.offsetWidth - margin.left - margin.right;
+    const height = 400 - margin.top - margin.bottom;
+
+    const svg = d3.select('#timeline-chart')
+        .append('svg')
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom)
+        .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Parse dates
+    const parseDate = d3.timeParse('%Y-%m-%d');
+    data.forEach(d => d.date = parseDate(d.date));
+
+    // Scales
+    const x = d3.scaleTime()
+        .domain(d3.extent(data, d => d.date))
+        .range([0, width]);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(data, d => d.amount)])
+        .nice()
+        .range([height, 0]);
+
+    // Line generator
+    const line = d3.line()
+        .x(d => x(d.date))
+        .y(d => y(d.amount));
+
+    // Area generator
+    const area = d3.area()
+        .x(d => x(d.date))
+        .y0(height)
+        .y1(d => y(d.amount));
+
+    // Grid
+    svg.append('g')
+        .attr('class', 'grid')
+        .attr('opacity', 0.1)
+        .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+
+    // Axes
+    svg.append('g')
+        .attr('transform', `translate(0,${height})`)
+        .call(d3.axisBottom(x));
+
+    svg.append('g')
+        .call(d3.axisLeft(y).tickFormat(d => '$' + d3.format('.2s')(d)));
+
+    // Area
+    svg.append('path')
+        .datum(data)
+        .attr('fill', '#3b82f6')
+        .attr('fill-opacity', 0.2)
+        .attr('d', area);
+
+    // Line
+    svg.append('path')
+        .datum(data)
+        .attr('fill', 'none')
+        .attr('stroke', '#3b82f6')
+        .attr('stroke-width', 2)
+        .attr('d', line);
+
+    // Dots
+    svg.selectAll('.dot')
+        .data(data)
+        .enter()
+        .append('circle')
+        .attr('class', 'dot')
+        .attr('cx', d => x(d.date))
+        .attr('cy', d => y(d.amount))
+        .attr('r', 4)
+        .attr('fill', '#3b82f6')
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
+        .on('mouseover', function(event, d) {
+            d3.select(this).attr('r', 6);
+            // Could add tooltip here
+        })
+        .on('mouseout', function() {
+            d3.select(this).attr('r', 4);
+        });
+}
+</script>
+{% endblock %}

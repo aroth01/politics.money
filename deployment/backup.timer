@@ -1,0 +1,17 @@
+[Unit]
+Description=Run Database Backup Daily
+Requires=backup.service
+
+[Timer]
+# Run every day at 2:00 AM (before the scraper runs at 3:00 AM)
+OnCalendar=daily
+OnCalendar=*-*-* 02:00:00
+
+# Run 5 minutes after boot if we missed a scheduled run
+Persistent=true
+
+# Randomize start time by up to 5 minutes
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

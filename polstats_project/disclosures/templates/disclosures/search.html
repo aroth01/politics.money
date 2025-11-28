@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Search - Utah Campaign Finance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">Search</h1>
+    </div>
+
+    <!-- Search Box -->
+    <form action="{% url 'disclosures:search' %}" method="get" class="w-full">
+        <div class="join w-full">
+            <input
+                type="text"
+                name="q"
+                value="{{ query }}"
+                placeholder="Search reports, PACs, contributors, expenditures..."
+                class="input input-bordered join-item w-full"
+                autofocus
+            />
+            <button type="submit" class="btn btn-primary join-item">Search</button>
+        </div>
+    </form>
+
+    {% if query %}
+    <!-- Results Summary -->
+    <div class="alert">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Found <strong>{{ total_results }}</strong> results for "{{ query }}"</span>
+    </div>
+
+    <!-- Reports Results -->
+    {% if reports %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Reports ({{ reports|length }})</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Report ID</th>
+                            <th>Organization</th>
+                            <th>Type</th>
+                            <th>Period</th>
+                            <th>Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in reports %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'disclosures:report_detail' report.report_id %}" class="link link-primary">
+                                    {{ report.report_id }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-semibold">{{ report.organization_name }}</div>
+                                <div class="text-sm opacity-60">{{ report.title }}</div>
+                            </td>
+                            <td><div class="badge badge-outline">{{ report.organization_type }}</div></td>
+                            <td>
+                                {% if report.end_date %}
+                                    {{ report.end_date|date:"M d, Y" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td class="font-semibold">{{ report.ending_balance|currency }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Entities Results -->
+    {% if entities %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Registered Entities ({{ entities|length }})</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Entity ID</th>
+                            <th>Name</th>
+                            <th>Location</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entity in entities %}
+                        <tr>
+                            <td><span class="font-mono">{{ entity.entity_id }}</span></td>
+                            <td>
+                                <div class="font-semibold">{{ entity.name }}</div>
+                                {% if entity.also_known_as %}
+                                <div class="text-sm opacity-60">AKA: {{ entity.also_known_as }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entity.city and entity.state %}
+                                    {{ entity.city }}, {{ entity.state }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entity.date_created %}
+                                    {{ entity.date_created|date:"M d, Y" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Contributors Results -->
+    {% if contributors %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Contributors ({{ contributors|length }})</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Address</th>
+                            <th>Total Amount</th>
+                            <th>Contributions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contributor in contributors %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'disclosures:contributor_detail' contributor.contributor_name %}" class="link link-primary font-semibold">
+                                    {{ contributor.contributor_name }}
+                                </a>
+                            </td>
+                            <td class="text-sm">{{ contributor.address|default:"N/A" }}</td>
+                            <td class="text-success font-semibold">{{ contributor.total_amount|currency }}</td>
+                            <td><div class="badge badge-neutral">{{ contributor.contribution_count }}</div></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Expenditures Results -->
+    {% if expenditures %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">Expenditure Recipients ({{ expenditures|length }})</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Recipient</th>
+                            <th>Purpose</th>
+                            <th>Total Amount</th>
+                            <th>Expenditures</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expenditure in expenditures %}
+                        <tr>
+                            <td class="font-semibold">{{ expenditure.recipient_name }}</td>
+                            <td class="text-sm">{{ expenditure.purpose|truncatewords:10|default:"N/A" }}</td>
+                            <td class="text-error font-semibold">{{ expenditure.total_amount|currency }}</td>
+                            <td><div class="badge badge-neutral">{{ expenditure.expenditure_count }}</div></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- No Results -->
+    {% if total_results == 0 %}
+    <div class="alert alert-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+        <span>No results found for "{{ query }}". Try a different search term.</span>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Initial State - Search Tips -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">Search Tips</h2>
+                <ul class="list-disc list-inside space-y-2">
+                    <li>Search by PAC name (e.g., "Utah Association")</li>
+                    <li>Search by contributor name (e.g., "John Smith")</li>
+                    <li>Search by report ID (e.g., "198820")</li>
+                    <li>Search by entity ID (e.g., "1414358")</li>
+                    <li>Search by city or address</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title">What You Can Find</h2>
+                <div class="space-y-3">
+                    <div>
+                        <div class="font-semibold">Reports</div>
+                        <div class="text-sm opacity-60">Campaign finance disclosure reports</div>
+                    </div>
+                    <div>
+                        <div class="font-semibold">Entities</div>
+                        <div class="text-sm opacity-60">Registered PACs and organizations</div>
+                    </div>
+                    <div>
+                        <div class="font-semibold">Contributors</div>
+                        <div class="text-sm opacity-60">People and organizations making contributions</div>
+                    </div>
+                    <div>
+                        <div class="font-semibold">Expenditures</div>
+                        <div class="text-sm opacity-60">Recipients of campaign spending</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

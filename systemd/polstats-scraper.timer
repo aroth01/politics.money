@@ -1,0 +1,17 @@
+[Unit]
+Description=PolStats Bulk Scraper Timer
+Requires=polstats-scraper.service
+
+[Timer]
+# Run daily at 2:00 AM
+OnCalendar=daily
+OnCalendar=02:00
+
+# Run 5 minutes after boot (useful for testing)
+OnBootSec=5min
+
+# If the system was off when the timer should have run, run it as soon as possible
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - Utah Campaign Finance Disclosures{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-4xl font-bold">Disclosure Reports</h1>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="card bg-base-200 shadow-xl">
+        <div class="card-body">
+            <form method="get" class="flex flex-col md:flex-row gap-4">
+                <div class="form-control flex-1">
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ search }}"
+                        placeholder="Search by organization name or report ID..."
+                        class="input input-bordered w-full"
+                    />
+                </div>
+                <div class="form-control">
+                    <select name="org_type" class="select select-bordered">
+                        <option value="">All Types</option>
+                        {% for type in org_types %}
+                        <option value="{{ type }}" {% if org_type == type %}selected{% endif %}>{{ type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control">
+                    <select name="sort" class="select select-bordered">
+                        <option value="-created_at" {% if sort == "-created_at" %}selected{% endif %}>Newest First</option>
+                        <option value="created_at" {% if sort == "created_at" %}selected{% endif %}>Oldest First</option>
+                        <option value="organization_name" {% if sort == "organization_name" %}selected{% endif %}>Name A-Z</option>
+                        <option value="-organization_name" {% if sort == "-organization_name" %}selected{% endif %}>Name Z-A</option>
+                        <option value="-ending_balance" {% if sort == "-ending_balance" %}selected{% endif %}>Highest Balance</option>
+                        <option value="ending_balance" {% if sort == "ending_balance" %}selected{% endif %}>Lowest Balance</option>
+                        <option value="report_id" {% if sort == "report_id" %}selected{% endif %}>ID (Low-High)</option>
+                        <option value="-report_id" {% if sort == "-report_id" %}selected{% endif %}>ID (High-Low)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Filter</button>
+                {% if search or org_type %}
+                <a href="{% url 'disclosures:reports_list' %}" class="btn btn-ghost">Clear</a>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div class="text-sm text-gray-600">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} reports
+    </div>
+
+    <!-- Reports Table -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body p-0">
+            <div class="overflow-x-auto">
+                <table class="table table-zebra">
+                    <thead>
+                        <tr>
+                            <th>Report ID</th>
+                            <th>Organization</th>
+                            <th>Type</th>
+                            <th>Report Type</th>
+                            <th>Contributions</th>
+                            <th>Expenditures</th>
+                            <th>Ending Balance</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in page_obj %}
+                        <tr class="hover">
+                            <td class="font-mono">{{ report.report_id }}</td>
+                            <td>
+                                <div class="max-w-xs truncate" title="{{ report.organization_name }}">
+                                    {{ report.organization_name|default:report.title|default:"-" }}
+                                </div>
+                            </td>
+                            <td>
+                                {% if report.organization_type %}
+                                <span class="badge badge-sm badge-primary">{{ report.organization_type }}</span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td class="text-sm">{{ report.report_type|truncatechars:20|default:"-" }}</td>
+                            <td class="font-mono text-right text-success">${{ report.total_contributions|floatformat:2|default:"0.00" }}</td>
+                            <td class="font-mono text-right text-error">${{ report.total_expenditures|floatformat:2|default:"0.00" }}</td>
+                            <td class="font-mono text-right font-bold">${{ report.ending_balance|floatformat:2|default:"0.00" }}</td>
+                            <td>
+                                <a href="{% url 'disclosures:report_detail' report.report_id %}" class="btn btn-sm btn-primary">View</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-8 text-gray-500">
+                                No reports found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="flex justify-center">
+        <div class="join">
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% if search %}&search={{ search }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="join-item btn btn-sm">«</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="join-item btn btn-sm">‹</a>
+            {% endif %}
+
+            <button class="join-item btn btn-sm btn-disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</button>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="join-item btn btn-sm">›</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if search %}&search={{ search }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}" class="join-item btn btn-sm">»</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+[Unit]
+Description=Utah Campaign Finance Bulk Scraper
+After=network.target
+
+[Service]
+Type=oneshot
+User=polstats
+Group=polstats
+
+# Working directory
+WorkingDirectory=/var/www/polstats
+
+# Environment variables
+EnvironmentFile=/var/www/polstats/.env
+
+# Run the bulk scrape command
+ExecStart=/var/www/polstats/venv/bin/python manage.py scrape_bulk_reports
+
+# Logging
+StandardOutput=append:/var/log/polstats/scraper.log
+StandardError=append:/var/log/polstats/scraper-error.log
+
+# Timeout (scraping can take a while)
+TimeoutStartSec=0
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

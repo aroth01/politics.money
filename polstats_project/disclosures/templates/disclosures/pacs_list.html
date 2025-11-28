@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Political Action Committees - Utah Campaign Finance{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">Political Action Committees</h1>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+        <div class="stat">
+            <div class="stat-title">Total PACs</div>
+            <div class="stat-value">{{ total_pacs }}</div>
+            <div class="stat-desc">Organizations</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Total Contributions</div>
+            <div class="stat-value text-success">{{ total_contributions|currency_int }}</div>
+            <div class="stat-desc">Received by all PACs</div>
+        </div>
+        <div class="stat">
+            <div class="stat-title">Total Expenditures</div>
+            <div class="stat-value text-error">{{ total_expenditures|currency_int }}</div>
+            <div class="stat-desc">Made by all PACs</div>
+        </div>
+    </div>
+
+    <!-- Search Box -->
+    <div class="form-control">
+        <input type="text" id="searchInput" placeholder="Search PACs by name..." class="input input-bordered w-full" onkeyup="filterTable()">
+    </div>
+
+    <!-- PACs Table -->
+    <div class="overflow-x-auto">
+        <table class="table table-zebra w-full" id="pacsTable">
+            <thead>
+                <tr>
+                    <th>Organization Name</th>
+                    <th>Type</th>
+                    <th>Total Contributions</th>
+                    <th>Total Expenditures</th>
+                    <th>Reports</th>
+                    <th>Latest Report</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pac in pacs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'disclosures:pac_detail' pac.organization_name %}" class="link link-primary font-semibold">
+                            {{ pac.organization_name }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="badge badge-outline">{{ pac.organization_type }}</div>
+                    </td>
+                    <td class="text-success font-semibold">
+                        {{ pac.total_contributions|currency }}
+                    </td>
+                    <td class="text-error font-semibold">
+                        {{ pac.total_expenditures|currency }}
+                    </td>
+                    <td>
+                        <div class="badge badge-neutral">{{ pac.report_count }}</div>
+                    </td>
+                    <td>
+                        {% if pac.latest_report %}
+                            {{ pac.latest_report|date:"M d, Y" }}
+                        {% else %}
+                            <span class="text-gray-400">N/A</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center text-gray-500">No PACs found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function filterTable() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toLowerCase();
+        const table = document.getElementById('pacsTable');
+        const rows = table.getElementsByTagName('tr');
+
+        for (let i = 1; i < rows.length; i++) {
+            const nameCell = rows[i].getElementsByTagName('td')[0];
+            if (nameCell) {
+                const textValue = nameCell.textContent || nameCell.innerText;
+                if (textValue.toLowerCase().indexOf(filter) > -1) {
+                    rows[i].style.display = '';
+                } else {
+                    rows[i].style.display = 'none';
+                }
+            }
+        }
+    }
+</script>
+{% endblock %}

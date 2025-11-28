@@ -1,0 +1,27 @@
+[Unit]
+Description=PolStats Bulk Scraper Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=YOUR_USERNAME
+WorkingDirectory=/Users/aaronroth/polstats
+Environment="PATH=/Users/aaronroth/polstats/venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Run the bulk scraper
+ExecStart=/Users/aaronroth/polstats/venv/bin/python manage.py bulk_scrape \
+    --type=all \
+    --delay=2.0 \
+    --max-pages=10 \
+    --update-existing
+
+# Logging
+StandardOutput=append:/Users/aaronroth/polstats/logs/scraper.log
+StandardError=append:/Users/aaronroth/polstats/logs/scraper-error.log
+
+# Restart policy
+Restart=on-failure
+RestartSec=300
+
+[Install]
+WantedBy=multi-user.target

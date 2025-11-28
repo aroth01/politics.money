@@ -1,0 +1,77 @@
+# Caddyfile for Utah Campaign Finance Disclosures
+#
+# Usage:
+#   1. Install Caddy: https://caddyserver.com/docs/install
+#   2. Update your-domain.com to your actual domain
+#   3. Run: sudo caddy run --config /path/to/Caddyfile
+#
+# Caddy automatically handles HTTPS certificates via Let's Encrypt
+
+# Replace with your actual domain
+your-domain.com {
+    # Enable automatic HTTPS
+    # Caddy will automatically obtain and renew SSL certificates
+
+    # Encode responses with gzip/zstd
+    encode gzip zstd
+
+    # Security headers
+    header {
+        # Prevent clickjacking
+        X-Frame-Options "DENY"
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+        # Enable XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Content Security Policy (adjust as needed for your D3/visx libraries)
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://d3js.org https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+        # Remove server identification
+        -Server
+    }
+
+    # Root directory for static files
+    root * /var/www/polstats/staticfiles
+
+    # Reverse proxy to Django/Gunicorn
+    reverse_proxy localhost:8000 {
+        # Pass real IP to Django
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+    }
+
+    # Serve static files directly (faster than Django)
+    handle /static/* {
+        root * /var/www/polstats
+        file_server
+    }
+
+    # Block access to sensitive files and directories
+    @blocked {
+        path /.git /.git/* /.env /.env.* *.sqlite3 *.py *.pyc __pycache__ __pycache__/*
+    }
+    handle @blocked {
+        respond "Access Denied" 403
+    }
+
+    # Access logging
+    log {
+        output file /var/log/caddy/polstats-access.log
+        format json
+    }
+
+    # Error handling
+    handle_errors {
+        respond "{err.status_code} {err.status_text}"
+    }
+}
+
+# HTTP to HTTPS redirect is automatic with Caddy
+
+# Optional: www redirect
+www.your-domain.com {
+    redir https://your-domain.com{uri} permanent
+}

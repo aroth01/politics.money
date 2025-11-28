@@ -1,0 +1,42 @@
+[Unit]
+Description=Gunicorn daemon for Utah Campaign Finance Disclosures
+After=network.target
+
+[Service]
+Type=notify
+# User and group to run as (create a dedicated user)
+User=polstats
+Group=polstats
+
+# Working directory
+WorkingDirectory=/var/www/polstats
+
+# Environment variables
+EnvironmentFile=/var/www/polstats/.env
+
+# Gunicorn command
+ExecStart=/var/www/polstats/venv/bin/gunicorn \
+    --bind 127.0.0.1:8000 \
+    --workers 4 \
+    --worker-class sync \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --timeout 30 \
+    --access-logfile /var/log/polstats/gunicorn-access.log \
+    --error-logfile /var/log/polstats/gunicorn-error.log \
+    --log-level info \
+    polstats_project.wsgi:application
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/polstats/db.sqlite3 /var/www/polstats/logs /var/log/polstats
+
+[Install]
+WantedBy=multi-user.target
