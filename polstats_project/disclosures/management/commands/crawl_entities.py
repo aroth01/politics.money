@@ -158,6 +158,10 @@ class Command(BaseCommand):
                     entity_data['also_known_as'] = field_value
                 elif (label_for == 'DateCreated' or label_text == 'Date Created') and 'date_created' not in entity_data:
                     entity_data['date_created'] = self.parse_date(field_value)
+                elif (label_text == 'Type' or label_text == 'Entity Type' or label_text == 'Registration Type') and 'entity_type' not in entity_data:
+                    entity_data['entity_type'] = field_value
+                elif (label_text == 'Status') and 'status' not in entity_data:
+                    entity_data['status'] = field_value
                 elif label_text == 'Street Address' and 'street_address' not in entity_data:
                     entity_data['street_address'] = field_value
                 elif label_text == 'Suite/PO Box' and 'suite_po_box' not in entity_data:
@@ -253,6 +257,8 @@ class Command(BaseCommand):
                     'source_url': entity_data.get('source_url', ''),
                     'name': entity_data.get('name', ''),
                     'also_known_as': entity_data.get('also_known_as', ''),
+                    'entity_type': entity_data.get('entity_type', ''),
+                    'status': entity_data.get('status', ''),
                     'date_created': entity_data.get('date_created'),
                     'street_address': entity_data.get('street_address', ''),
                     'suite_po_box': entity_data.get('suite_po_box', ''),
@@ -269,6 +275,8 @@ class Command(BaseCommand):
                 entity.source_url = entity_data.get('source_url', '')
                 entity.name = entity_data.get('name', '')
                 entity.also_known_as = entity_data.get('also_known_as', '')
+                entity.entity_type = entity_data.get('entity_type', '')
+                entity.status = entity_data.get('status', '')
                 entity.date_created = entity_data.get('date_created')
                 entity.street_address = entity_data.get('street_address', '')
                 entity.suite_po_box = entity_data.get('suite_po_box', '')

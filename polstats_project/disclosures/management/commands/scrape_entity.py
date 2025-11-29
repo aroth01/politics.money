@@ -132,6 +132,10 @@ class Command(BaseCommand):
                     entity_data['also_known_as'] = field_value
                 elif (label_for == 'DateCreated' or label_text == 'Date Created') and 'date_created' not in entity_data:
                     entity_data['date_created'] = self.parse_date(field_value)
+                elif (label_text == 'Type' or label_text == 'Entity Type' or label_text == 'Registration Type') and 'entity_type' not in entity_data:
+                    entity_data['entity_type'] = field_value
+                elif (label_text == 'Status') and 'status' not in entity_data:
+                    entity_data['status'] = field_value
                 elif label_text == 'Street Address' and 'street_address' not in entity_data:
                     entity_data['street_address'] = field_value
                 elif label_text == 'Suite/PO Box' and 'suite_po_box' not in entity_data:

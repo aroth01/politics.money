@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import DisclosureReport, Contribution, Expenditure, EntityRegistration, EntityOfficer
+from .models import (
+    DisclosureReport, Contribution, Expenditure, EntityRegistration, EntityOfficer,
+    LobbyistReport, LobbyistExpenditure, LobbyistRegistration, LobbyistPrincipal
+)
 
 
 @admin.register(DisclosureReport)
@@ -158,3 +161,143 @@ class EntityOfficerAdmin(admin.ModelAdmin):
     ]
     readonly_fields = ['created_at', 'updated_at']
     raw_id_fields = ['entity']
+
+
+# ============================================================================
+# Lobbyist Admin
+# ============================================================================
+
+
+@admin.register(LobbyistReport)
+class LobbyistReportAdmin(admin.ModelAdmin):
+    list_display = [
+        'report_id',
+        'principal_name',
+        'report_type',
+        'total_expenditures',
+        'submit_date'
+    ]
+    list_filter = [
+        'report_type',
+        'created_at',
+        'last_scraped_at',
+        'submit_date'
+    ]
+    search_fields = [
+        'report_id',
+        'title',
+        'principal_name'
+    ]
+    readonly_fields = ['created_at', 'updated_at', 'last_scraped_at']
+    fieldsets = (
+        ('Report Information', {
+            'fields': ('report_id', 'source_url', 'title')
+        }),
+        ('Principal', {
+            'fields': ('principal_name', 'principal_phone', 'principal_street_address',
+                      'principal_city', 'principal_state', 'principal_zip')
+        }),
+        ('Report Period', {
+            'fields': ('report_type', 'begin_date', 'end_date', 'due_date', 'submit_date')
+        }),
+        ('Financial Summary', {
+            'fields': ('total_expenditures',)
+        }),
+        ('Metadata', {
+            'fields': ('report_info', 'created_at', 'updated_at', 'last_scraped_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(LobbyistExpenditure)
+class LobbyistExpenditureAdmin(admin.ModelAdmin):
+    list_display = [
+        'recipient_name',
+        'amount',
+        'date',
+        'location',
+        'purpose',
+        'report'
+    ]
+    list_filter = [
+        'date',
+        'is_amendment',
+        'report'
+    ]
+    search_fields = ['recipient_name', 'location', 'purpose']
+    readonly_fields = ['created_at', 'updated_at']
+    raw_id_fields = ['report']
+
+
+class LobbyistPrincipalInline(admin.TabularInline):
+    model = LobbyistPrincipal
+    extra = 0
+    fields = ['name', 'contact', 'phone', 'address']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(LobbyistRegistration)
+class LobbyistRegistrationAdmin(admin.ModelAdmin):
+    list_display = [
+        'entity_id',
+        'name',
+        'organization_name',
+        'registration_date',
+        'city',
+        'state',
+        'last_scraped_at'
+    ]
+    list_filter = [
+        'state',
+        'registration_date',
+        'last_scraped_at'
+    ]
+    search_fields = [
+        'entity_id',
+        'name',
+        'first_name',
+        'last_name',
+        'organization_name',
+        'principal_name',
+        'city'
+    ]
+    readonly_fields = ['created_at', 'updated_at', 'last_scraped_at']
+    inlines = [LobbyistPrincipalInline]
+    fieldsets = (
+        ('Lobbyist Information', {
+            'fields': ('entity_id', 'source_url', 'first_name', 'last_name', 'name',
+                      'phone', 'registration_date')
+        }),
+        ('Organization', {
+            'fields': ('organization_name', 'organization_phone')
+        }),
+        ('Address', {
+            'fields': ('street_address', 'city', 'state', 'zip_code')
+        }),
+        ('Principal/Client', {
+            'fields': ('principal_name', 'principal_phone', 'principal_address', 'lobbying_purposes')
+        }),
+        ('Metadata', {
+            'fields': ('raw_data', 'created_at', 'updated_at', 'last_scraped_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(LobbyistPrincipal)
+class LobbyistPrincipalAdmin(admin.ModelAdmin):
+    list_display = [
+        'name',
+        'lobbyist',
+        'contact',
+        'phone'
+    ]
+    search_fields = [
+        'name',
+        'contact',
+        'phone',
+        'lobbyist__name'
+    ]
+    readonly_fields = ['created_at', 'updated_at']
+    raw_id_fields = ['lobbyist']

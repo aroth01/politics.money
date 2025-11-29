@@ -82,6 +82,23 @@ DATABASES = {
 #     }
 # }
 
+# SQLite Performance Optimizations
+if 'sqlite' in DATABASES['default']['ENGINE']:
+    # Enable WAL mode for better concurrency and performance
+    def init_sqlite_connection(sender, connection, **kwargs):
+        if connection.vendor == 'sqlite':
+            cursor = connection.cursor()
+            cursor.execute('PRAGMA journal_mode=WAL;')
+            cursor.execute('PRAGMA synchronous=NORMAL;')
+            cursor.execute('PRAGMA temp_store=MEMORY;')
+            cursor.execute('PRAGMA mmap_size=134217728;')  # 128MB memory-mapped I/O
+            cursor.execute('PRAGMA cache_size=10000;')     # ~40MB cache
+            cursor.execute('PRAGMA page_size=4096;')
+            cursor.close()
+
+    from django.db.backends.signals import connection_created
+    connection_created.connect(init_sqlite_connection)
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

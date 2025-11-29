@@ -213,7 +213,7 @@ def contributors_list(request):
         )
 
     # Pagination
-    paginator = Paginator(list(contributors), 50)
+    paginator = Paginator(contributors, 50)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
 
@@ -251,7 +251,7 @@ def expenditures_list(request):
         )
 
     # Pagination
-    paginator = Paginator(list(recipients), 50)
+    paginator = Paginator(recipients, 50)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
 
@@ -752,8 +752,19 @@ def out_of_state(request):
     """Out-of-state contribution statistics with map visualization."""
     import re
 
-    # Get year-filtered contributions
-    contributions = get_year_filtered_contributions(request)
+    # Get year-filtered contributions (exclude empty addresses at database level)
+    contributions = get_year_filtered_contributions(request).exclude(
+        address=''
+    ).exclude(address=None)
+
+    # Filter out Utah addresses at database level (much faster than Python)
+    # This uses database-level regex for better performance
+    out_of_state_contributions = contributions.exclude(
+        Q(address__iregex=r',?\s+UT\s+\d{5}') |
+        Q(address__iregex=r',?\s+Utah\s+\d{5}') |
+        Q(address__iendswith=' UT') |
+        Q(address__iendswith=', UT')
+    )
 
     # US state abbreviations
     states = [
@@ -764,23 +775,21 @@ def out_of_state(request):
         'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
     ]
 
-    # Pattern to find state abbreviation in address
+    # Pattern to find state abbreviation in address (end of string)
     state_pattern = r'\b(' + '|'.join(states) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
 
     # Group contributions by state
+    # NOTE: We still need Python loop here because SQLite doesn't have good regex extraction
+    # But we've reduced the dataset by filtering at database level first
     state_data = {}
-    out_of_state_contributors = []
 
-    for contrib in contributions:
-        if not contrib.address:
-            continue
-
+    for contrib in out_of_state_contributions.only('address', 'amount', 'contributor_name'):
         # Try to extract state from address
         match = re.search(state_pattern, contrib.address, re.IGNORECASE)
         if match:
             state = match.group(1).upper()
 
-            # Only include non-Utah states
+            # Only include non-Utah states (double-check)
             if state != 'UT':
                 # Add to state totals
                 if state not in state_data:
@@ -808,15 +817,7 @@ def out_of_state(request):
     # Sort by total amount descending
     state_list.sort(key=lambda x: x['total_amount'], reverse=True)
 
-    # Get top out-of-state contributors
-    out_of_state_contributions = contributions.exclude(
-        Q(address__icontains=' UT ') |
-        Q(address__icontains=', UT') |
-        Q(address__icontains=' Utah') |
-        Q(address__iendswith=' UT') |
-        Q(address__iendswith=', UT')
-    ).exclude(address='').exclude(address=None)
-
+    # Get top out-of-state contributors (database aggregation)
     top_out_of_state = (
         out_of_state_contributions
         .values('contributor_name', 'address')
@@ -827,18 +828,17 @@ def out_of_state(request):
         .order_by('-total_amount')[:20]
     )
 
-    # Calculate total stats
-    total_out_of_state_amount = out_of_state_contributions.aggregate(
-        total=Sum('amount')
-    )['total'] or Decimal('0')
-
-    total_out_of_state_count = out_of_state_contributions.count()
+    # Calculate total stats (single database query)
+    stats = out_of_state_contributions.aggregate(
+        total=Sum('amount'),
+        count=Count('id')
+    )
 
     context = {
         'state_list': state_list,
         'top_out_of_state': top_out_of_state,
-        'total_out_of_state_amount': total_out_of_state_amount,
-        'total_out_of_state_count': total_out_of_state_count,
+        'total_out_of_state_amount': stats['total'] or Decimal('0'),
+        'total_out_of_state_count': stats['count'] or 0,
     }
 
     return render(request, 'disclosures/out_of_state.html', context)
