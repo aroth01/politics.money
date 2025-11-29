@@ -80,6 +80,17 @@ else
     exit 1
 fi
 
+# Restart entity crawler (if enabled)
+if systemctl list-unit-files | grep -q entity-crawler; then
+    echo "Restarting entity crawler..."
+    systemctl restart entity-crawler
+    if systemctl is-active --quiet entity-crawler; then
+        echo "✓ Entity crawler restarted"
+    else
+        echo "⚠ Warning: Entity crawler failed to start (this is non-critical)"
+    fi
+fi
+
 # Restart Caddy (if using Caddy)
 if systemctl list-unit-files | grep -q caddy; then
     echo "Restarting Caddy..."

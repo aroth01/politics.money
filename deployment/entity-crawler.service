@@ -1,0 +1,41 @@
+[Unit]
+Description=Utah Campaign Finance Entity Crawler
+Documentation=https://github.com/aaronroth/polstats
+After=network.target
+
+[Service]
+Type=simple
+User=polstats
+Group=polstats
+
+# Working directory
+WorkingDirectory=/var/www/polstats
+
+# Environment variables
+EnvironmentFile=/var/www/polstats/.env
+Environment="PYTHONUNBUFFERED=1"
+
+# Run the entity crawler
+ExecStart=/var/www/polstats/venv/bin/python manage.py crawl_entities --start-id 1 --delay 2.0 --max-failures 100 --update-existing
+
+# Restart policy
+Restart=on-failure
+RestartSec=30
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=append:/var/log/polstats/entity-crawler.log
+StandardError=append:/var/log/polstats/entity-crawler-error.log
+SyslogIdentifier=polstats-entity-crawler
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Timeout (crawling can take a long time)
+TimeoutStartSec=0
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target
