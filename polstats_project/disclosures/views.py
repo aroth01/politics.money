@@ -885,8 +885,9 @@ def api_out_of_state_map(request):
     ]
 
     # Use database regex to filter - much faster than Python loops
-    # Pattern matches state code followed by optional zip at end of address
-    state_pattern = r'\b(' + '|'.join(out_of_state_codes) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
+    # Pattern matches state code preceded by space/comma, followed by optional zip at end of address
+    # PostgreSQL-compatible: uses [,\s] instead of \b for word boundaries
+    state_pattern = r'[,\s](' + '|'.join(out_of_state_codes) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
 
     # Filter contributions to those with out-of-state addresses
     out_of_state_contribs = contributions.filter(address__iregex=state_pattern)

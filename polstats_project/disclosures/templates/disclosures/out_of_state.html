@@ -394,7 +394,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Fetch map data
     console.log('Fetching map data...');
-    fetch("{% url 'disclosures:api_out_of_state_map' %}")
+    // Get year parameter from current page URL if it exists
+    const urlParams = new URLSearchParams(window.location.search);
+    const year = urlParams.get('year');
+    const apiUrl = "{% url 'disclosures:api_out_of_state_map' %}" + (year ? `?year=${year}` : '');
+
+    console.log('API URL:', apiUrl);
+    fetch(apiUrl)
         .then(response => {
             console.log('Map API response received:', response.status);
             if (!response.ok) {
@@ -404,6 +410,10 @@ document.addEventListener('DOMContentLoaded', function() {
         })
         .then(data => {
             console.log('Map data loaded:', data.length, 'states');
+            if (data.length === 0) {
+                document.getElementById('us-map').innerHTML = '<div class="alert alert-warning"><span>No contribution data available for the selected filters.</span></div>';
+                return;
+            }
             createMap(data);
         })
         .catch(error => {
