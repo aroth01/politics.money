@@ -1,0 +1,716 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ candidate_name }} - Campaign Finance - Utah Political Finance{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Breadcrumb -->
+    <div class="mb-6">
+        <div class="text-sm breadcrumbs">
+            <ul>
+                <li><a href="{% url 'disclosures:candidates_list' %}" class="link">Candidates</a></li>
+                <li>{{ candidate_name }}</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-4xl font-bold mb-2">{{ candidate_name }}</h1>
+
+        <!-- Office and Party Info -->
+        {% if office_info %}
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+            {% if office_info.party %}
+            <span class="badge badge-lg
+                {% if office_info.party == 'Republican' %}badge-error
+                {% elif office_info.party == 'Democratic' %}badge-info
+                {% elif office_info.party == 'Libertarian' %}badge-warning
+                {% else %}badge-neutral{% endif %}">
+                {{ office_info.party }}
+            </span>
+            {% endif %}
+
+            {% if office_info.office %}
+                {% if office_info.all_offices %}
+                    {# Multiple offices - show all with counts #}
+                    {% for office_item in office_info.all_offices %}
+                    <span class="badge badge-lg badge-secondary">
+                        {{ office_item.name }}{% if office_info.all_districts and office_item.name == office_info.office %} District {{ office_info.district }}{% endif %}
+                        <span class="ml-1 text-xs">({{ office_item.count }})</span>
+                    </span>
+                    {% endfor %}
+                {% else %}
+                    {# Single office #}
+                    <span class="badge badge-lg badge-secondary">
+                        {{ office_info.office }}{% if office_info.district %} District {{ office_info.district }}{% endif %}
+                    </span>
+                {% endif %}
+            {% endif %}
+
+            {% if office_info.county %}
+            <span class="badge badge-lg badge-success">
+                {{ office_info.county }} County
+            </span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Campaign Years -->
+        <div class="flex items-center gap-4">
+            <p class="text-base-content/60">Complete campaign finance summary</p>
+            {% if campaign_years %}
+            <span class="text-sm">•</span>
+            <span class="badge badge-neutral badge-lg">
+                Campaign Years: {{ campaign_years|join:", " }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full mb-8">
+        <div class="stat">
+            <div class="stat-title">Total Raised</div>
+            <div class="stat-value text-success">${{ stats.total_raised|floatformat:0|intcomma }}</div>
+            <div class="stat-desc">{{ stats.contribution_count|intcomma }} contributions</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-title">Total Spent</div>
+            <div class="stat-value text-error">${{ stats.total_spent|floatformat:0|intcomma }}</div>
+            <div class="stat-desc">{{ stats.expenditure_count|intcomma }} expenditures</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-title">Cash on Hand</div>
+            <div class="stat-value text-info">${{ stats.cash_on_hand|floatformat:0|intcomma }}</div>
+            <div class="stat-desc">Latest balance</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-title">Contributors</div>
+            <div class="stat-value text-secondary">{{ stats.contributor_count|intcomma }}</div>
+            <div class="stat-desc">{{ stats.report_count }} reports</div>
+        </div>
+    </div>
+
+    <!-- In-State Contribution Gauge -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="card-title">Contribution Source</h2>
+            <p class="text-sm text-base-content/60 mb-4">In-state vs out-of-state money (weighted for PAC contributions)</p>
+            <div id="instateGauge" class="flex items-center justify-center" style="height: 200px;">
+                <div class="text-base-content/40">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cash Flow Sankey Diagram -->
+    <div class="card bg-base-100 shadow-xl mb-8" style="overflow-x: auto; overflow-y: visible;">
+        <div class="card-body">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex-1">
+                    <h2 class="card-title">Contribution Flow</h2>
+                    <p class="text-sm text-base-content/60">Top contributors to candidate (includes direct contributions and PAC flows when available)</p>
+                </div>
+                <div class="ml-4 flex-shrink-0 group relative">
+                    <svg class="w-5 h-5 text-base-content/40 hover:text-base-content/60 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div class="invisible group-hover:visible absolute right-0 top-6 w-80 bg-base-300 text-base-content text-xs rounded-lg p-3 z-10 shadow-lg">
+                        <p class="font-semibold mb-2">About PAC Contributor Data:</p>
+                        <p class="mb-2">A PAC is allowed to report contributions "in the aggregate" if a person does not donate more than $50 to the PAC throughout a calendar year. Once a donor contributes more than $50, he or she must be itemized on the PAC's report with their name and street address.</p>
+                        <p class="text-base-content/70 text-xs">
+                            <a href="https://disclosures.utah.gov/File/292" target="_blank" class="link">Learn more</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div id="sankeyChart" style="min-height: 500px; width: 100%; overflow: visible;"></div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Contributions Timeline -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title mb-4">Contributions Over Time</h2>
+                <div style="height: 300px; position: relative;">
+                    <canvas id="contributionsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Expenditures Timeline -->
+        <div class="card bg-base-100 shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title mb-4">Expenditures Over Time</h2>
+                <div style="height: 300px; position: relative;">
+                    <canvas id="expendituresChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Contributors -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Top Contributors</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Contributor</th>
+                            <th>Address</th>
+                            <th class="text-right">Total Amount</th>
+                            <th class="text-right">Contributions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contributor in top_contributors %}
+                        <tr class="hover">
+                            <td>
+                                <div class="font-medium">{{ contributor.contributor_name }}</div>
+                            </td>
+                            <td class="text-sm">
+                                {{ contributor.address|truncatewords:10 }}
+                            </td>
+                            <td class="text-right">
+                                <span class="text-success font-semibold">
+                                    ${{ contributor.total_amount|floatformat:0|intcomma }}
+                                </span>
+                            </td>
+                            <td class="text-right">
+                                {{ contributor.contribution_count }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center opacity-50">
+                                No contributors found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Expenditures -->
+    <div class="card bg-base-100 shadow-xl mb-8">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Top Expenditures</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Recipient</th>
+                            <th>Purpose</th>
+                            <th class="text-right">Total Amount</th>
+                            <th class="text-right">Transactions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expenditure in top_expenditures %}
+                        <tr class="hover">
+                            <td>
+                                <div class="font-medium">{{ expenditure.recipient_name }}</div>
+                            </td>
+                            <td class="text-sm">
+                                {{ expenditure.purpose|truncatewords:15 }}
+                            </td>
+                            <td class="text-right">
+                                <span class="text-error font-semibold">
+                                    ${{ expenditure.total_amount|floatformat:0|intcomma }}
+                                </span>
+                            </td>
+                            <td class="text-right">
+                                {{ expenditure.expenditure_count }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center opacity-50">
+                                No expenditures found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Reports -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title mb-4">Recent Reports</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Report ID</th>
+                            <th>Period</th>
+                            <th class="text-right">Contributions</th>
+                            <th class="text-right">Expenditures</th>
+                            <th class="text-right">Ending Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for report in reports %}
+                        <tr class="hover">
+                            <td class="whitespace-nowrap">
+                                <a href="{% url 'disclosures:report_detail' report.report_id %}" class="link link-primary font-medium">
+                                    {{ report.report_id }}
+                                </a>
+                            </td>
+                            <td class="whitespace-nowrap">
+                                {% if report.begin_date and report.end_date %}
+                                    {{ report.begin_date|date:"M d" }} - {{ report.end_date|date:"M d, Y" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td class="whitespace-nowrap text-right text-success font-semibold">
+                                ${{ report.total_contributions|floatformat:0|intcomma }}
+                            </td>
+                            <td class="whitespace-nowrap text-right text-error font-semibold">
+                                ${{ report.total_expenditures|floatformat:0|intcomma }}
+                            </td>
+                            <td class="whitespace-nowrap text-right text-info font-semibold">
+                                ${{ report.ending_balance|floatformat:0|intcomma }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center opacity-50">
+                                No reports found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if all_reports_count > 10 %}
+            <div class="text-sm text-base-content/60 mt-4">
+                Showing 10 most recent reports ({{ all_reports_count|intcomma }} total)
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js for timeline charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+<!-- D3.js for Sankey diagram -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
+<script>
+// Fetch Sankey data and render
+const year = new URLSearchParams(window.location.search).get('year') || '';
+const apiUrl = "{% url 'disclosures:api_candidate_sankey' candidate_name %}" + (year ? `?year=${year}` : '');
+
+console.log('Fetching Sankey data from:', apiUrl);
+
+fetch(apiUrl)
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Received data:', data);
+        if (!data.nodes || !data.links) {
+            throw new Error('Invalid data structure');
+        }
+        if (data.nodes.length === 0) {
+            document.getElementById('sankeyChart').innerHTML = '<p class="text-center text-gray-500">No cash flow data available</p>';
+            return;
+        }
+        renderSankey(data);
+    })
+    .catch(error => {
+        console.error('Error loading Sankey data:', error);
+        document.getElementById('sankeyChart').innerHTML = `<p class="text-center text-red-500">Failed to load data: ${error.message}</p>`;
+    });
+
+function renderSankey(data) {
+    const container = document.getElementById('sankeyChart');
+    const width = 1200;
+
+    // Dynamic height based on number of nodes
+    const minHeight = 500;
+    const nodeHeight = 30;
+    const calculatedHeight = Math.max(minHeight, data.nodes.length * nodeHeight) + 50;
+    const height = calculatedHeight;
+    container.style.height = `${height}px`;
+
+    const margin = { top: 20, right: 200, bottom: 20, left: 200 };
+
+    // Clear any existing content
+    container.innerHTML = '';
+
+    // Create SVG with viewBox for responsive scaling
+    const svg = d3.select('#sankeyChart')
+        .append('svg')
+        .attr('viewBox', `0 0 ${width} ${height}`)
+        .attr('preserveAspectRatio', 'xMidYMin meet')
+        .style('display', 'block')
+        .style('width', '100%')
+        .style('height', 'auto')
+        .style('margin', '0 auto');
+
+    // Create Sankey generator
+    const sankey = d3.sankey()
+        .nodeWidth(20)
+        .nodePadding(15)
+        .extent([[margin.left, margin.top], [width - margin.right, height - margin.bottom]]);
+
+    // Process data
+    const graph = sankey({
+        nodes: data.nodes.map(d => Object.assign({}, d)),
+        links: data.links.map(d => Object.assign({}, d))
+    });
+
+    // Color scale
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // Add links
+    svg.append('g')
+        .selectAll('path')
+        .data(graph.links)
+        .join('path')
+        .attr('d', d3.sankeyLinkHorizontal())
+        .attr('stroke', d => color(d.source.name))
+        .attr('stroke-width', d => Math.max(1, d.width))
+        .attr('fill', 'none')
+        .attr('opacity', 0.5)
+        .append('title')
+        .text(d => `${d.source.name} → ${d.target.name}\n$${d.value.toLocaleString()}`);
+
+    // Add nodes
+    svg.append('g')
+        .selectAll('rect')
+        .data(graph.nodes)
+        .join('rect')
+        .attr('x', d => d.x0)
+        .attr('y', d => d.y0)
+        .attr('height', d => d.y1 - d.y0)
+        .attr('width', d => d.x1 - d.x0)
+        .attr('fill', d => color(d.name))
+        .append('title')
+        .text(d => `${d.name}\n$${d.value.toLocaleString()}`);
+
+    // Add labels
+    svg.append('g')
+        .selectAll('text')
+        .data(graph.nodes)
+        .join('text')
+        .attr('x', d => d.x0 < width / 2 ? d.x1 + 8 : d.x0 - 8)
+        .attr('y', d => (d.y1 + d.y0) / 2)
+        .attr('dy', '0.35em')
+        .attr('text-anchor', d => d.x0 < width / 2 ? 'start' : 'end')
+        .attr('font-size', '12px')
+        .attr('fill', '#374151')
+        .text(d => d.name);
+}
+</script>
+
+<script>
+// Campaign years for highlighting
+const campaignYears = [{% for year in campaign_years %}{{ year }}{% if not forloop.last %},{% endif %}{% endfor %}];
+
+// Create year boundary annotations
+const yearAnnotations = {};
+campaignYears.forEach((year, index) => {
+    // Alternate colors for each campaign year
+    const colors = [
+        'rgba(59, 130, 246, 0.05)',   // Blue
+        'rgba(16, 185, 129, 0.05)',   // Green
+        'rgba(245, 158, 11, 0.05)',   // Amber
+        'rgba(139, 92, 246, 0.05)',   // Purple
+        'rgba(236, 72, 153, 0.05)'    // Pink
+    ];
+
+    yearAnnotations[`year${year}`] = {
+        type: 'box',
+        xMin: `Jan ${year}`,
+        xMax: `Dec ${year}`,
+        backgroundColor: colors[index % colors.length],
+        borderWidth: 0,
+        label: {
+            display: true,
+            content: `${year}`,
+            position: 'start',
+            font: {
+                size: 10,
+                weight: 'bold'
+            },
+            color: 'rgba(107, 114, 128, 0.7)'
+        }
+    };
+});
+
+// Contributions Chart
+const contributionsData = {
+    labels: [
+        {% for item in monthly_contributions %}
+        '{{ item.month|date:"M Y" }}'{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ],
+    datasets: [{
+        label: 'Contributions',
+        data: [
+            {% for item in monthly_contributions %}
+            {{ item.total|default:0 }}{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ],
+        borderColor: 'rgb(34, 197, 94)',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.3,
+        fill: true
+    }]
+};
+
+const contributionsChart = new Chart(document.getElementById('contributionsChart'), {
+    type: 'line',
+    data: contributionsData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return '$' + context.parsed.y.toLocaleString();
+                    }
+                }
+            },
+            annotation: {
+                annotations: yearAnnotations
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value.toLocaleString();
+                    }
+                }
+            }
+        }
+    }
+});
+
+// Expenditures Chart
+const expendituresData = {
+    labels: [
+        {% for item in monthly_expenditures %}
+        '{{ item.month|date:"M Y" }}'{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ],
+    datasets: [{
+        label: 'Expenditures',
+        data: [
+            {% for item in monthly_expenditures %}
+            {{ item.total|default:0 }}{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ],
+        borderColor: 'rgb(249, 115, 22)',
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        tension: 0.3,
+        fill: true
+    }]
+};
+
+const expendituresChart = new Chart(document.getElementById('expendituresChart'), {
+    type: 'line',
+    data: expendituresData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2,
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return '$' + context.parsed.y.toLocaleString();
+                    }
+                }
+            },
+            annotation: {
+                annotations: yearAnnotations
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return '$' + value.toLocaleString();
+                    }
+                }
+            }
+        }
+    }
+});
+
+// Fetch and render in-state percentage gauge
+const instateApiUrl = "{% url 'disclosures:api_candidate_instate_percentage' candidate_name %}" + (year ? `?year=${year}` : '');
+fetch(instateApiUrl)
+    .then(response => response.json())
+    .then(data => {
+        renderGauge(data);
+    })
+    .catch(error => {
+        console.error('Error loading in-state data:', error);
+        document.getElementById('instateGauge').innerHTML = '<p class="text-gray-500">Unable to load data</p>';
+    });
+
+function renderGauge(data) {
+    const container = document.getElementById('instateGauge');
+    const width = 600;
+    const height = 200;
+
+    container.innerHTML = '';
+
+    const svg = d3.select('#instateGauge')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+    const centerX = width / 2;
+    const centerY = height - 20;
+    const radius = 120;
+
+    // Create arc generator
+    const arc = d3.arc()
+        .innerRadius(radius - 30)
+        .outerRadius(radius)
+        .startAngle(-Math.PI / 2)
+        .cornerRadius(5);
+
+    // Background arc (full semicircle)
+    svg.append('path')
+        .attr('d', arc({endAngle: Math.PI / 2}))
+        .attr('transform', `translate(${centerX}, ${centerY})`)
+        .attr('fill', '#e5e7eb');
+
+    // In-state arc (green)
+    const instateAngle = -Math.PI / 2 + (data.instate_percentage / 100) * Math.PI;
+    svg.append('path')
+        .attr('d', arc({endAngle: instateAngle}))
+        .attr('transform', `translate(${centerX}, ${centerY})`)
+        .attr('fill', '#10b981');
+
+    // Out-of-state arc (red)
+    const outstateAngle = instateAngle + (data.outstate_percentage / 100) * Math.PI;
+    const outstateArc = d3.arc()
+        .innerRadius(radius - 30)
+        .outerRadius(radius)
+        .startAngle(instateAngle)
+        .cornerRadius(5);
+
+    svg.append('path')
+        .attr('d', outstateArc({endAngle: outstateAngle}))
+        .attr('transform', `translate(${centerX}, ${centerY})`)
+        .attr('fill', '#ef4444');
+
+    // Unknown/no address arc (gray) - if any
+    if (data.unknown_percentage > 0) {
+        const unknownArc = d3.arc()
+            .innerRadius(radius - 30)
+            .outerRadius(radius)
+            .startAngle(outstateAngle)
+            .cornerRadius(5);
+
+        svg.append('path')
+            .attr('d', unknownArc({endAngle: Math.PI / 2}))
+            .attr('transform', `translate(${centerX}, ${centerY})`)
+            .attr('fill', '#9ca3af');
+    }
+
+    // Center text - main percentage
+    svg.append('text')
+        .attr('x', centerX)
+        .attr('y', centerY - 15)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '36px')
+        .attr('font-weight', 'bold')
+        .attr('fill', '#10b981')
+        .text(`${data.instate_percentage.toFixed(1)}%`);
+
+    svg.append('text')
+        .attr('x', centerX)
+        .attr('y', centerY + 10)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '14px')
+        .attr('fill', '#6b7280')
+        .text('In-State');
+
+    // Labels
+    const labelY = centerY + 40;
+
+    // In-state label
+    svg.append('circle')
+        .attr('cx', centerX - 120)
+        .attr('cy', labelY)
+        .attr('r', 5)
+        .attr('fill', '#10b981');
+
+    svg.append('text')
+        .attr('x', centerX - 110)
+        .attr('y', labelY + 4)
+        .attr('font-size', '12px')
+        .attr('fill', '#374151')
+        .text(`Utah: ${data.instate_percentage.toFixed(1)}% ($${(data.instate_amount / 1000000).toFixed(2)}M)`);
+
+    // Out-of-state label
+    svg.append('circle')
+        .attr('cx', centerX + 10)
+        .attr('cy', labelY)
+        .attr('r', 5)
+        .attr('fill', '#ef4444');
+
+    svg.append('text')
+        .attr('x', centerX + 20)
+        .attr('y', labelY + 4)
+        .attr('font-size', '12px')
+        .attr('fill', '#374151')
+        .text(`Out-of-State: ${data.outstate_percentage.toFixed(1)}% ($${(data.outstate_amount / 1000000).toFixed(2)}M)`);
+
+    // Unknown label (if significant)
+    if (data.unknown_percentage > 0.5) {
+        svg.append('circle')
+            .attr('cx', centerX - 60)
+            .attr('cy', labelY + 20)
+            .attr('r', 5)
+            .attr('fill', '#9ca3af');
+
+        svg.append('text')
+            .attr('x', centerX - 50)
+            .attr('y', labelY + 24)
+            .attr('font-size', '12px')
+            .attr('fill', '#6b7280')
+            .text(`Unknown: ${data.unknown_percentage.toFixed(1)}%`);
+    }
+}
+</script>
+{% endblock %}

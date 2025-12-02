@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
+from django.db import models
 from django.db.models import Sum, Count, Q, Min, Max
 from django.db.models.functions import TruncMonth, TruncDay, ExtractYear
 from django.core.paginator import Paginator
@@ -691,20 +692,22 @@ def api_pac_sankey(request, organization_name):
     contributor_names = set(c['contributor_name'] for c in contributions)
     recipient_names = set(r['recipient_name'] for r in expenditures)
 
-    # Find entities that appear in both lists (these would create cycles)
+    # Find entities that appear in both lists (would create cycles if not handled)
     circular_entities = contributor_names & recipient_names
-
-    # Filter out circular entities from contributions and expenditures
-    filtered_contributions = [c for c in contributions if c['contributor_name'] not in circular_entities]
-    filtered_expenditures = [e for e in expenditures if e['recipient_name'] not in circular_entities]
 
     # Build node map
     node_map = {}
     node_index = 0
 
     # Add contributor nodes (sources)
-    for contrib in filtered_contributions:
-        node_name = contrib['contributor_name']
+    # For circular entities, append " (Contributor)" to make them unique
+    for contrib in contributions:
+        base_name = contrib['contributor_name']
+        if base_name in circular_entities:
+            node_name = f"{base_name} (Contributor)"
+        else:
+            node_name = base_name
+
         if node_name not in node_map:
             node_map[node_name] = node_index
             nodes.append({'name': node_name})
@@ -717,26 +720,44 @@ def api_pac_sankey(request, organization_name):
     node_index += 1
 
     # Add recipient nodes (targets)
-    for exp in filtered_expenditures:
-        node_name = exp['recipient_name']
+    # For circular entities, append " (Recipient)" to make them unique
+    for exp in expenditures:
+        base_name = exp['recipient_name']
+        if base_name in circular_entities:
+            node_name = f"{base_name} (Recipient)"
+        else:
+            node_name = base_name
+
         if node_name not in node_map:
             node_map[node_name] = node_index
             nodes.append({'name': node_name})
             node_index += 1
 
     # Add links from contributors to PAC
-    for contrib in filtered_contributions:
+    for contrib in contributions:
+        base_name = contrib['contributor_name']
+        if base_name in circular_entities:
+            source_name = f"{base_name} (Contributor)"
+        else:
+            source_name = base_name
+
         links.append({
-            'source': node_map[contrib['contributor_name']],
+            'source': node_map[source_name],
             'target': pac_node_index,
             'value': float(contrib['total'])
         })
 
     # Add links from PAC to recipients
-    for exp in filtered_expenditures:
+    for exp in expenditures:
+        base_name = exp['recipient_name']
+        if base_name in circular_entities:
+            target_name = f"{base_name} (Recipient)"
+        else:
+            target_name = base_name
+
         links.append({
             'source': pac_node_index,
-            'target': node_map[exp['recipient_name']],
+            'target': node_map[target_name],
             'value': float(exp['total'])
         })
 
@@ -847,41 +868,38 @@ def out_of_state(request):
 @ratelimit(key="ip", rate="100/h", method="GET")
 def api_out_of_state_map(request):
     """API endpoint for out-of-state contribution map data."""
+    from django.db.models import Sum, Value
+    from django.db.models.functions import Upper, Substr
     import re
 
-    # Get year-filtered contributions
-    contributions = get_year_filtered_contributions(request)
+    # Get year-filtered contributions that have addresses
+    contributions = get_year_filtered_contributions(request).exclude(address='')
 
-    # US state abbreviations
-    states = [
+    # US state abbreviations (excluding UT)
+    out_of_state_codes = [
         'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
         'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
         'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
         'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
-        'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+        'SD', 'TN', 'TX', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
     ]
 
-    # Pattern to find state abbreviation in address
-    state_pattern = r'\b(' + '|'.join(states) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
+    # Use database regex to filter - much faster than Python loops
+    # Pattern matches state code followed by optional zip at end of address
+    state_pattern = r'\b(' + '|'.join(out_of_state_codes) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
 
-    # Group contributions by state
+    # Filter contributions to those with out-of-state addresses
+    out_of_state_contribs = contributions.filter(address__iregex=state_pattern)
+
+    # Now extract states and aggregate in Python (smaller dataset after filtering)
     state_data = {}
-
-    for contrib in contributions:
-        if not contrib.address:
-            continue
-
-        # Try to extract state from address
-        match = re.search(state_pattern, contrib.address, re.IGNORECASE)
+    for contrib in out_of_state_contribs.values('address', 'amount'):
+        match = re.search(state_pattern, contrib['address'], re.IGNORECASE)
         if match:
             state = match.group(1).upper()
-
-            # Only include non-Utah states
-            if state != 'UT':
-                if state not in state_data:
-                    state_data[state] = 0
-
-                state_data[state] += float(contrib.amount or 0)
+            if state not in state_data:
+                state_data[state] = 0
+            state_data[state] += float(contrib['amount'] or 0)
 
     # Return as array of {state, amount} objects
     data = [
@@ -895,10 +913,11 @@ def api_out_of_state_map(request):
 @ratelimit(key="ip", rate="100/h", method="GET")
 def api_state_contributions(request, state_code):
     """API endpoint to get all contributions from a specific state."""
+    from django.db.models import Sum, Q
     import re
 
-    # Get year-filtered contributions
-    contributions = get_year_filtered_contributions(request)
+    # Get year-filtered contributions with addresses
+    contributions = get_year_filtered_contributions(request).exclude(address='')
 
     # US state abbreviations
     states = [
@@ -909,28 +928,24 @@ def api_state_contributions(request, state_code):
         'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
     ]
 
-    # Pattern to find state abbreviation at end of address
-    state_pattern = r'\b(' + '|'.join(states) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
+    # Pattern to find THIS specific state at end of address
+    # Use database regex first to narrow down results
+    state_pattern = r'\b' + state_code.upper() + r'(?:\s+\d{5}(?:-\d{4})?)?\s*$'
 
-    # Filter contributions using regex to match state at end of address
-    state_contributions_list = []
-    for contrib in contributions.select_related('report'):
-        if not contrib.address:
-            continue
+    # Filter in database first (much faster than Python loop)
+    state_contributions = contributions.filter(
+        address__iregex=state_pattern
+    ).select_related('report').order_by('-date_received', '-amount')
 
-        # Try to extract state from address
-        match = re.search(state_pattern, contrib.address, re.IGNORECASE)
-        if match:
-            extracted_state = match.group(1).upper()
-            if extracted_state == state_code.upper():
-                state_contributions_list.append(contrib)
+    # Calculate totals using database aggregation
+    aggregation = state_contributions.aggregate(
+        total_amount=Sum('amount'),
+        total_count=models.Count('id')
+    )
 
-    # Sort by date and amount
-    state_contributions_list.sort(key=lambda x: (x.date_received or '', x.amount or 0), reverse=True)
-
-    # Get all contributions (limit to 100 for performance)
+    # Get top 100 for display
     contributions_data = []
-    for contrib in state_contributions_list[:100]:
+    for contrib in state_contributions[:100]:
         contributions_data.append({
             'contributor_name': contrib.contributor_name,
             'address': contrib.address,
@@ -940,15 +955,11 @@ def api_state_contributions(request, state_code):
             'report_id': contrib.report.report_id if contrib.report else '',
         })
 
-    # Calculate summary stats
-    total = sum(float(c.amount or 0) for c in state_contributions_list)
-    count = len(state_contributions_list)
-
     return JsonResponse({
         'state': state_code,
         'contributions': contributions_data,
-        'total_amount': total,
-        'total_count': count,
+        'total_amount': float(aggregation['total_amount'] or 0),
+        'total_count': aggregation['total_count'] or 0,
     })
 
 
@@ -1031,3 +1042,579 @@ def global_search(request):
     }
 
     return render(request, 'disclosures/search.html', context)
+
+
+def candidates_list(request):
+    """List of all candidates and office holders with campaign finance data."""
+    # Get year-filtered reports
+    reports = get_year_filtered_reports(request)
+
+    # Filter to only candidates (organization_type = 'Candidates & Office Holders')
+    candidate_reports = reports.filter(organization_type='Candidates & Office Holders')
+
+    # Aggregate by organization name (candidate name)
+    candidates = (
+        candidate_reports
+        .values('organization_name')
+        .annotate(
+            total_raised=Sum('total_contributions'),
+            total_spent=Sum('total_expenditures'),
+            report_count=Count('id'),
+            latest_report_date=Max('end_date'),
+            first_report_date=Min('end_date'),
+            first_year=ExtractYear(Min('end_date')),
+            last_year=ExtractYear(Max('end_date'))
+        )
+        .order_by('-total_raised')
+    )
+
+    # Pagination
+    paginator = Paginator(candidates, 50)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Calculate summary stats
+    stats = candidate_reports.aggregate(
+        total_candidates=Count('organization_name', distinct=True),
+        total_raised=Sum('total_contributions'),
+        total_spent=Sum('total_expenditures'),
+        total_reports=Count('id')
+    )
+
+    context = {
+        'page_obj': page_obj,
+        'stats': stats,
+    }
+
+    return render(request, 'disclosures/candidates_list.html', context)
+
+
+def candidate_detail(request, candidate_name):
+    """Detail page for a specific candidate showing all their reports and financial activity."""
+    # URL decode the candidate name
+    candidate_name = unquote(candidate_name)
+
+    # Get year-filtered reports
+    reports = get_year_filtered_reports(request)
+
+    # Get all reports for this candidate
+    candidate_reports = reports.filter(
+        organization_type='Candidates & Office Holders',
+        organization_name=candidate_name
+    ).order_by('-end_date')
+
+    if not candidate_reports.exists():
+        from django.http import Http404
+        raise Http404("Candidate not found")
+
+    # Get contributions and expenditures across all reports
+    contributions = Contribution.objects.filter(
+        report__in=candidate_reports
+    )
+    expenditures = Expenditure.objects.filter(
+        report__in=candidate_reports
+    )
+
+    # Top contributors
+    top_contributors = (
+        contributions
+        .values('contributor_name', 'address')
+        .annotate(
+            total_amount=Sum('amount'),
+            contribution_count=Count('id')
+        )
+        .order_by('-total_amount')[:20]
+    )
+
+    # Top expenditures by recipient
+    top_expenditures = (
+        expenditures
+        .values('recipient_name', 'purpose')
+        .annotate(
+            total_amount=Sum('amount'),
+            expenditure_count=Count('id')
+        )
+        .order_by('-total_amount')[:20]
+    )
+
+    # Monthly contribution trends
+    monthly_contributions = (
+        contributions
+        .annotate(month=TruncMonth('date_received'))
+        .values('month')
+        .annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        )
+        .order_by('month')
+    )
+
+    # Monthly expenditure trends
+    monthly_expenditures = (
+        expenditures
+        .annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(
+            total=Sum('amount'),
+            count=Count('id')
+        )
+        .order_by('month')
+    )
+
+    # Summary statistics
+    stats = {
+        'total_raised': contributions.aggregate(total=Sum('amount'))['total'] or Decimal('0'),
+        'total_spent': expenditures.aggregate(total=Sum('amount'))['total'] or Decimal('0'),
+        'contribution_count': contributions.count(),
+        'expenditure_count': expenditures.count(),
+        'contributor_count': contributions.values('contributor_name').distinct().count(),
+        'report_count': candidate_reports.count(),
+    }
+
+    # Calculate cash on hand (most recent report's ending balance)
+    latest_report = candidate_reports.first()
+    if latest_report and latest_report.ending_balance:
+        stats['cash_on_hand'] = latest_report.ending_balance
+    else:
+        stats['cash_on_hand'] = Decimal('0')
+
+    # Get campaign years from report dates
+    year_range = candidate_reports.aggregate(
+        first_year=ExtractYear(Min('end_date')),
+        last_year=ExtractYear(Max('end_date'))
+    )
+
+    # Get all unique years
+    campaign_years = sorted(set(
+        candidate_reports.annotate(year=ExtractYear('end_date'))
+        .values_list('year', flat=True)
+        .distinct()
+    ))
+
+    # Extract office/position information from report_info JSON
+    # Get the most common values across all reports
+    from collections import Counter
+    offices = []
+    districts = []
+    parties = []
+    counties = []
+
+    for report in candidate_reports:
+        if report.report_info:
+            if 'Office' in report.report_info:
+                offices.append(report.report_info['Office'])
+            if 'District' in report.report_info:
+                districts.append(report.report_info['District'])
+            if 'Party' in report.report_info:
+                parties.append(report.report_info['Party'])
+            if 'County' in report.report_info:
+                counties.append(report.report_info['County'])
+
+    # Get most common values and track all unique offices
+    office_info = {}
+
+    if offices:
+        office_counter = Counter(offices)
+        # Get all unique offices with their counts, sorted by count (descending)
+        all_offices = office_counter.most_common()
+        office_info['office'] = all_offices[0][0]  # Most common
+        # If multiple offices, include them all
+        if len(all_offices) > 1:
+            office_info['all_offices'] = [
+                {'name': office, 'count': count}
+                for office, count in all_offices
+            ]
+
+    if districts:
+        district_counter = Counter(districts)
+        all_districts = district_counter.most_common()
+        office_info['district'] = all_districts[0][0]
+        # If multiple districts, include them
+        if len(all_districts) > 1:
+            office_info['all_districts'] = [dist for dist, count in all_districts]
+
+    if parties:
+        office_info['party'] = Counter(parties).most_common(1)[0][0]
+
+    if counties:
+        county = Counter(counties).most_common(1)[0][0]
+        # Only include county if it's meaningful (not Multi- or Statewide)
+        if county not in ['Multi-', 'Statewide', '']:
+            office_info['county'] = county
+
+    context = {
+        'candidate_name': candidate_name,
+        'reports': candidate_reports[:10],  # Show latest 10 reports
+        'all_reports_count': candidate_reports.count(),
+        'top_contributors': top_contributors,
+        'top_expenditures': top_expenditures,
+        'monthly_contributions': monthly_contributions,
+        'monthly_expenditures': monthly_expenditures,
+        'stats': stats,
+        'campaign_years': campaign_years,
+        'year_range': year_range,
+        'office_info': office_info,
+    }
+
+    return render(request, 'disclosures/candidate_detail.html', context)
+
+
+def api_candidate_sankey(request, candidate_name):
+    """API endpoint for Candidate Sankey diagram showing: Contributors → Candidate and Contributors → PAC → Candidate."""
+    candidate_name = unquote(candidate_name)
+
+    # Get year-filtered reports
+    reports = get_year_filtered_reports(request)
+
+    # Get reports for this candidate
+    candidate_reports = reports.filter(
+        organization_name=candidate_name,
+        organization_type='Candidates & Office Holders'
+    )
+
+    # Get direct contributions to candidate - top 10
+    direct_contributions = list(
+        get_year_filtered_contributions(request)
+        .filter(report__in=candidate_reports)
+        .exclude(contributor_name=candidate_name)
+        .values('contributor_name')
+        .annotate(total=Sum('amount'))
+        .order_by('-total')[:10]
+    )
+
+    # Identify PACs that contributed to the candidate
+    # Check if contributor has reports filed as a PAC (more reliable than name matching)
+    pac_contributors = []
+    non_pac_contributors = []
+
+    for contrib in direct_contributions:
+        contrib_name = contrib['contributor_name']
+
+        # Check if this contributor has reports filed as a PAC
+        # Try exact match first
+        has_pac_reports = reports.filter(
+            organization_name=contrib_name,
+            organization_type__icontains='Political Action Committee'
+        ).exists()
+
+        # If no exact match, try fuzzy matching by removing common suffixes and matching on key words
+        if not has_pac_reports:
+            from django.db.models import Q
+            clean_name = contrib_name.replace(' PAC', '').replace(' Committee', '').replace(' Fund', '').strip()
+
+            # Split into words and create a query that matches all significant words
+            words = [w for w in clean_name.split() if len(w) > 2]  # Only words longer than 2 chars
+            if words:
+                q = Q(organization_type__icontains='Political Action Committee')
+                for word in words:
+                    q &= Q(organization_name__icontains=word)
+                has_pac_reports = reports.filter(q).exists()
+
+        if has_pac_reports:
+            pac_contributors.append(contrib)
+        else:
+            non_pac_contributors.append(contrib)
+
+    # Build nodes and links for Sankey diagram
+    nodes = []
+    links = []
+    node_map = {}
+    node_index = 0
+
+    # For each PAC that contributed to the candidate, get its contributors
+    pac_contributor_data = {}
+    for pac_contrib in pac_contributors:
+        pac_name = pac_contrib['contributor_name']
+
+        # Get reports for this PAC - try exact match first, then fuzzy match
+        # Handle cases where contributor name might be "Friends of Gary Herbert PAC"
+        # but org name is "Friends Of Gary R. Herbert"
+        pac_reports = reports.filter(
+            organization_name=pac_name,
+            organization_type__icontains='Political Action Committee'
+        )
+
+        # If no exact match, try fuzzy matching using key words
+        if not pac_reports.exists():
+            from django.db.models import Q
+            clean_name = pac_name.replace(' PAC', '').replace(' Committee', '').replace(' Fund', '').strip()
+
+            # Split into words and create a query that matches all significant words
+            words = [w for w in clean_name.split() if len(w) > 2]
+            if words:
+                q = Q(organization_type__icontains='Political Action Committee')
+                for word in words:
+                    q &= Q(organization_name__icontains=word)
+                pac_reports = reports.filter(q)
+
+        if pac_reports.exists():
+            # Use the actual organization name from the reports (not the contributor name)
+            # This avoids duplication when multiple contributor names match the same PAC
+            actual_pac_name = pac_reports.first().organization_name
+
+            # Only add if we haven't already processed this PAC
+            if actual_pac_name not in pac_contributor_data:
+                # Get top 5 contributors to this PAC
+                pac_contributors_list = list(
+                    get_year_filtered_contributions(request)
+                    .filter(report__in=pac_reports)
+                    .exclude(contributor_name__in=[pac_name, candidate_name, actual_pac_name])
+                    .values('contributor_name')
+                    .annotate(total=Sum('amount'))
+                    .order_by('-total')[:5]
+                )
+                if pac_contributors_list:
+                    # Store using actual PAC name and include the original contributor name and amount
+                    pac_contributor_data[actual_pac_name] = {
+                        'contributors': pac_contributors_list,
+                        'contribution_to_candidate': pac_contrib['total']
+                    }
+
+    # Add contributor nodes to PACs (leftmost layer)
+    for pac_name, pac_data in pac_contributor_data.items():
+        for contrib in pac_data['contributors']:
+            contrib_name = contrib['contributor_name']
+            if contrib_name not in node_map:
+                node_map[contrib_name] = node_index
+                nodes.append({'name': contrib_name})
+                node_index += 1
+
+    # Add non-PAC direct contributor nodes (leftmost layer)
+    for contrib in non_pac_contributors:
+        contrib_name = contrib['contributor_name']
+        if contrib_name not in node_map:
+            node_map[contrib_name] = node_index
+            nodes.append({'name': contrib_name})
+            node_index += 1
+
+    # Add PAC nodes (middle layer) - only those with contributor data
+    pac_nodes = {}
+    for pac_name in pac_contributor_data.keys():
+        if pac_name not in node_map:
+            node_map[pac_name] = node_index
+            nodes.append({'name': pac_name})
+            pac_nodes[pac_name] = node_index
+            node_index += 1
+
+    # Add candidate node (rightmost - target)
+    candidate_node_index = node_index
+    node_map[candidate_name] = candidate_node_index
+    nodes.append({'name': candidate_name})
+    node_index += 1
+
+    # Add links: Contributors → PAC
+    for pac_name, pac_data in pac_contributor_data.items():
+        for contrib in pac_data['contributors']:
+            links.append({
+                'source': node_map[contrib['contributor_name']],
+                'target': node_map[pac_name],
+                'value': float(contrib['total'])
+            })
+
+    # Add links: PAC → Candidate
+    for pac_name, pac_data in pac_contributor_data.items():
+        links.append({
+            'source': node_map[pac_name],
+            'target': candidate_node_index,
+            'value': float(pac_data['contribution_to_candidate'])
+        })
+
+    # Add links: Non-PAC contributors → Candidate (direct)
+    for contrib in non_pac_contributors:
+        links.append({
+            'source': node_map[contrib['contributor_name']],
+            'target': candidate_node_index,
+            'value': float(contrib['total'])
+        })
+
+    data = {
+        'nodes': nodes,
+        'links': links
+    }
+
+    return JsonResponse(data)
+
+def extract_state_from_address(address):
+    """Extract state code from address string."""
+    if not address:
+        return None
+
+    import re
+    # Look for state code pattern: 2 uppercase letters followed by optional space and zip
+    # Common patterns: "UT 84116", "UT84116", ", UT 84116", "Utah 84116"
+    match = re.search(r',\s*([A-Z]{2})\s+\d{5}', address)
+    if match:
+        return match.group(1)
+
+    # Try end of string
+    match = re.search(r'\b([A-Z]{2})\s*\d{5}', address)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+@ratelimit(key='ip', rate='100/m', method='GET')
+def api_pac_instate_percentage(request, organization_name):
+    """API endpoint for PAC in-state contribution percentage."""
+    organization_name = unquote(organization_name)
+
+    # Get year-filtered reports
+    reports = get_year_filtered_reports(request)
+    pac_reports = reports.filter(
+        organization_name=organization_name,
+        organization_type__icontains='Political Action Committee'
+    )
+
+    if not pac_reports.exists():
+        return JsonResponse({'error': 'PAC not found'}, status=404)
+
+    # Get all contributions to this PAC
+    contributions = get_year_filtered_contributions(request).filter(
+        report__in=pac_reports
+    )
+
+    # Calculate in-state vs out-of-state
+    instate_total = Decimal('0')
+    outstate_total = Decimal('0')
+    unknown_total = Decimal('0')
+
+    for contrib in contributions:
+        state = extract_state_from_address(contrib.address)
+        if state == 'UT':
+            instate_total += contrib.amount
+        elif state:
+            outstate_total += contrib.amount
+        else:
+            unknown_total += contrib.amount
+
+    total = instate_total + outstate_total + unknown_total
+
+    if total == 0:
+        instate_percentage = 0
+        outstate_percentage = 0
+        unknown_percentage = 0
+    else:
+        instate_percentage = float((instate_total / total) * 100)
+        outstate_percentage = float((outstate_total / total) * 100)
+        unknown_percentage = float((unknown_total / total) * 100)
+
+    return JsonResponse({
+        'instate_percentage': round(instate_percentage, 1),
+        'outstate_percentage': round(outstate_percentage, 1),
+        'unknown_percentage': round(unknown_percentage, 1),
+        'instate_amount': float(instate_total),
+        'outstate_amount': float(outstate_total),
+        'unknown_amount': float(unknown_total),
+        'total_amount': float(total)
+    })
+
+
+@ratelimit(key='ip', rate='100/m', method='GET')
+def api_candidate_instate_percentage(request, candidate_name):
+    """
+    API endpoint for candidate in-state contribution percentage.
+    Accounts for PAC contributions by weighting them by the PAC's own in-state percentage.
+    """
+    candidate_name = unquote(candidate_name)
+
+    # Get year-filtered reports
+    reports = get_year_filtered_reports(request)
+    candidate_reports = reports.filter(
+        organization_name=candidate_name,
+        organization_type='Candidates & Office Holders'
+    )
+
+    if not candidate_reports.exists():
+        return JsonResponse({'error': 'Candidate not found'}, status=404)
+
+    # Get all contributions to candidate
+    contributions = get_year_filtered_contributions(request).filter(
+        report__in=candidate_reports
+    )
+
+    # Track weighted totals
+    instate_total = Decimal('0')
+    outstate_total = Decimal('0')
+    unknown_total = Decimal('0')
+
+    for contrib in contributions:
+        contrib_name = contrib.contributor_name
+        contrib_amount = contrib.amount
+
+        # Check if this contributor is a PAC
+        # Try exact match first
+        pac_reports = reports.filter(
+            organization_name=contrib_name,
+            organization_type__icontains='Political Action Committee'
+        )
+
+        # If no exact match, try fuzzy matching
+        if not pac_reports.exists():
+            clean_name = contrib_name.replace(' PAC', '').replace(' Committee', '').replace(' Fund', '').strip()
+            words = [w for w in clean_name.split() if len(w) > 2]
+            if words:
+                q = Q(organization_type__icontains='Political Action Committee')
+                for word in words:
+                    q &= Q(organization_name__icontains=word)
+                pac_reports = reports.filter(q)
+
+        if pac_reports.exists():
+            # This is a PAC - get the PAC's in-state percentage
+            pac_contributions = get_year_filtered_contributions(request).filter(
+                report__in=pac_reports
+            )
+
+            pac_instate = Decimal('0')
+            pac_outstate = Decimal('0')
+            pac_unknown = Decimal('0')
+
+            for pac_contrib in pac_contributions:
+                state = extract_state_from_address(pac_contrib.address)
+                if state == 'UT':
+                    pac_instate += pac_contrib.amount
+                elif state:
+                    pac_outstate += pac_contrib.amount
+                else:
+                    pac_unknown += pac_contrib.amount
+
+            pac_total = pac_instate + pac_outstate + pac_unknown
+
+            if pac_total > 0:
+                # Weight the contribution by PAC's percentages
+                instate_total += contrib_amount * (pac_instate / pac_total)
+                outstate_total += contrib_amount * (pac_outstate / pac_total)
+                unknown_total += contrib_amount * (pac_unknown / pac_total)
+            else:
+                # PAC has no contributions data, treat as unknown
+                unknown_total += contrib_amount
+        else:
+            # Direct contribution - check state
+            state = extract_state_from_address(contrib.address)
+            if state == 'UT':
+                instate_total += contrib_amount
+            elif state:
+                outstate_total += contrib_amount
+            else:
+                unknown_total += contrib_amount
+
+    total = instate_total + outstate_total + unknown_total
+
+    if total == 0:
+        instate_percentage = 0
+        outstate_percentage = 0
+        unknown_percentage = 0
+    else:
+        instate_percentage = float((instate_total / total) * 100)
+        outstate_percentage = float((outstate_total / total) * 100)
+        unknown_percentage = float((unknown_total / total) * 100)
+
+    return JsonResponse({
+        'instate_percentage': round(instate_percentage, 1),
+        'outstate_percentage': round(outstate_percentage, 1),
+        'unknown_percentage': round(unknown_percentage, 1),
+        'instate_amount': float(instate_total),
+        'outstate_amount': float(outstate_total),
+        'unknown_amount': float(unknown_total),
+        'total_amount': float(total)
+    })

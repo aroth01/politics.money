@@ -5,8 +5,12 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.management import call_command
 from django.db import transaction, models
 from datetime import datetime, timedelta
+from decouple import config
 
 from ...models import DisclosureReport, EntityRegistration
+
+# Load custom User-Agent from environment
+USER_AGENT = config('USER_AGENT', default='PolStatsBot/1.0 (Utah Political Finance Data Aggregator)')
 
 
 class Command(BaseCommand):
@@ -90,7 +94,8 @@ class Command(BaseCommand):
 
             try:
                 # Use GET instead of HEAD - some servers don't respond well to HEAD
-                response = requests.get(url, timeout=30, allow_redirects=False)
+                headers = {'User-Agent': USER_AGENT}
+                response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
 
                 if response.status_code == 200:
                     # Entity exists!
@@ -149,7 +154,8 @@ class Command(BaseCommand):
             url = f'https://disclosures.utah.gov/Search/PublicSearch?Skip={skip}'
 
             try:
-                response = requests.get(url, timeout=30)
+                headers = {'User-Agent': USER_AGENT}
+                response = requests.get(url, headers=headers, timeout=30)
                 if response.status_code != 200:
                     self.stdout.write(
                         self.style.WARNING(f'Failed to fetch skip={skip}, status: {response.status_code}')

@@ -11,11 +11,15 @@ from django.db import transaction
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import requests
+from decouple import config
 
 from ...models import EntityRegistration, EntityOfficer
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+# Load custom User-Agent from environment
+USER_AGENT = config('USER_AGENT', default='PolStatsBot/1.0 (Utah Political Finance Data Aggregator)')
 
 
 class Command(BaseCommand):
@@ -111,7 +115,8 @@ class Command(BaseCommand):
         url = f'https://disclosures.utah.gov/Registration/EntityDetails/{entity_id}'
 
         try:
-            response = requests.get(url, timeout=30)
+            headers = {'User-Agent': USER_AGENT}
+            response = requests.get(url, headers=headers, timeout=30)
 
             # Handle 404s
             if response.status_code == 404:

@@ -10,7 +10,12 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import re
+import os
 from typing import Dict, List, Any
+from decouple import config
+
+# Load custom User-Agent from environment (defaults to a descriptive bot identifier)
+USER_AGENT = config('USER_AGENT', default='PolStatsBot/1.0 (Utah Political Finance Data Aggregator)')
 
 
 def parse_currency(value: str) -> float:
@@ -163,9 +168,10 @@ def parse_expenditures(soup: BeautifulSoup) -> List[Dict[str, Any]]:
         cells = row.find_all('td')
 
         # Handle different table formats:
-        # Newer format (7 cells): Date, Recipient, Purpose, I, L, A, Amount
+        # Regular format (7 cells): Date, Recipient, Purpose, I, L, A, Amount
         # Older format (8 cells): Date, Recipient, Purpose, I, P, L, A, Amount (has "P" for Public Service Assistance)
-        if len(cells) >= 7:
+        # Lobbyist format (8 cells): Date, Recipient, Location, Purpose, [empty], [empty], [empty], Amount
+        if len(cells) >= 6:
             # Determine which cell has the amount (should be last cell with $ sign)
             amount_cell_idx = -1
             for i in range(len(cells) - 1, -1, -1):
@@ -177,21 +183,47 @@ def parse_expenditures(soup: BeautifulSoup) -> List[Dict[str, Any]]:
             if amount_cell_idx == -1:
                 amount_cell_idx = len(cells) - 1  # Default to last cell
 
-            # Calculate flag positions based on amount position
-            # Flags are always the 3 cells before the amount
-            amendment_idx = amount_cell_idx - 1
-            loan_idx = amount_cell_idx - 2
-            in_kind_idx = amount_cell_idx - 3
+            # Detect if this is a lobbyist report by checking if we have 8 cells with mostly empty flag cells
+            # Lobbyist reports have: Date, Recipient, Location, Purpose, [empty], [empty], [empty], Amount
+            # Regular reports have: Date, Recipient, Purpose, I, L, A, Amount (7 cells) or with P flag (8 cells)
+            is_lobbyist = False
+            if len(cells) == 8:
+                # Check if cells 4, 5, 6 are mostly empty (no links or substantial text)
+                # This distinguishes lobbyist (which has location in cell 2) from regular with P flag
+                empty_flags = sum(1 for i in [4, 5, 6] if not cells[i].find('a', class_='anchorLink') and not cells[i].get_text(strip=True))
+                if empty_flags >= 2:  # At least 2 of the 3 flag cells are empty
+                    is_lobbyist = True
 
-            expenditure = {
-                'date': cells[0].get_text(strip=True),
-                'recipient_name': cells[1].get_text(strip=True),
-                'purpose': cells[2].get_text(strip=True),
-                'in_kind': bool(cells[in_kind_idx].find('a', class_='anchorLink') and cells[in_kind_idx].get_text(strip=True)) if in_kind_idx >= 3 else False,
-                'loan': bool(cells[loan_idx].find('a', class_='anchorLink') and cells[loan_idx].get_text(strip=True)) if loan_idx >= 3 else False,
-                'amendment': bool(cells[amendment_idx].find('a', class_='anchorLink') and cells[amendment_idx].get_text(strip=True)) if amendment_idx >= 3 else False,
-                'amount': parse_currency(cells[amount_cell_idx].get_text(strip=True))
-            }
+            if is_lobbyist:
+                # Lobbyist format: Date, Recipient, Location, Purpose, [empty], [empty], [empty], Amount
+                expenditure = {
+                    'date': cells[0].get_text(strip=True),
+                    'recipient_name': cells[1].get_text(strip=True),
+                    'address': cells[2].get_text(strip=True),  # Location field
+                    'purpose': cells[3].get_text(strip=True),
+                    'in_kind': False,
+                    'loan': False,
+                    'amendment': False,
+                    'amount': parse_currency(cells[7].get_text(strip=True))
+                }
+            else:
+                # Regular campaign finance format
+                # Calculate flag positions based on amount position
+                # Flags are always the 3 cells before the amount
+                amendment_idx = amount_cell_idx - 1
+                loan_idx = amount_cell_idx - 2
+                in_kind_idx = amount_cell_idx - 3
+
+                expenditure = {
+                    'date': cells[0].get_text(strip=True),
+                    'recipient_name': cells[1].get_text(strip=True),
+                    'address': '',  # No location field for regular reports
+                    'purpose': cells[2].get_text(strip=True),
+                    'in_kind': bool(cells[in_kind_idx].find('a', class_='anchorLink') and cells[in_kind_idx].get_text(strip=True)) if in_kind_idx >= 3 else False,
+                    'loan': bool(cells[loan_idx].find('a', class_='anchorLink') and cells[loan_idx].get_text(strip=True)) if loan_idx >= 3 else False,
+                    'amendment': bool(cells[amendment_idx].find('a', class_='anchorLink') and cells[amendment_idx].get_text(strip=True)) if amendment_idx >= 3 else False,
+                    'amount': parse_currency(cells[amount_cell_idx].get_text(strip=True))
+                }
             expenditures.append(expenditure)
 
     return expenditures
@@ -267,8 +299,11 @@ def parse_utah_disclosure(url: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing all parsed data in structured format
     """
-    # Fetch the page
-    response = requests.get(url)
+    # Fetch the page with custom User-Agent
+    headers = {
+        'User-Agent': USER_AGENT
+    }
+    response = requests.get(url, headers=headers)
     response.raise_for_status()
 
     # Parse with BeautifulSoup

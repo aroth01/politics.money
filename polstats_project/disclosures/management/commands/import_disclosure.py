@@ -159,6 +159,7 @@ class Command(BaseCommand):
                     date_raw=exp_data.get('date', ''),
                     date=self.parse_date(exp_data.get('date', '')),
                     recipient_name=exp_data.get('recipient_name', ''),
+                    address=exp_data.get('address', ''),  # Location/venue for lobbyist expenditures
                     purpose=exp_data.get('purpose', ''),
                     is_in_kind=exp_data.get('in_kind', False),
                     is_loan=exp_data.get('loan', False),

@@ -14,6 +14,8 @@ urlpatterns = [
     path('expenditures/', views.expenditures_list, name='expenditures_list'),
     path('pacs/', views.pacs_list, name='pacs_list'),
     path('pacs/<path:organization_name>/', views.pac_detail, name='pac_detail'),
+    path('candidates/', views.candidates_list, name='candidates_list'),
+    path('candidates/<path:candidate_name>/', views.candidate_detail, name='candidate_detail'),
     path('out-of-state/', views.out_of_state, name='out_of_state'),
     path('search/', views.global_search, name='search'),
 
@@ -24,6 +26,9 @@ urlpatterns = [
     path('api/global/timeline/', views.api_global_timeline, name='api_global_timeline'),
     path('api/contributors/<path:contributor_name>/timeline/', views.api_contributor_timeline, name='api_contributor_timeline'),
     path('api/pacs/<path:organization_name>/sankey/', views.api_pac_sankey, name='api_pac_sankey'),
+    path('api/candidates/<path:candidate_name>/sankey/', views.api_candidate_sankey, name='api_candidate_sankey'),
+    path('api/pacs/<path:organization_name>/instate/', views.api_pac_instate_percentage, name='api_pac_instate_percentage'),
+    path('api/candidates/<path:candidate_name>/instate/', views.api_candidate_instate_percentage, name='api_candidate_instate_percentage'),
     path('api/out-of-state/map/', views.api_out_of_state_map, name='api_out_of_state_map'),
     path('api/out-of-state/<str:state_code>/', views.api_state_contributions, name='api_state_contributions'),
 ]

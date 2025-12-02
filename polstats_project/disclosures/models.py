@@ -99,6 +99,7 @@ class Expenditure(models.Model):
     date_raw = models.CharField(max_length=50, blank=True)
 
     recipient_name = models.CharField(max_length=500)
+    address = models.TextField(blank=True)  # Location/venue for lobbyist expenditures
     purpose = models.TextField(blank=True)
 
     # Flags

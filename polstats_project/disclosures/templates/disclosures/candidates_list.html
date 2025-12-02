@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Candidates & Office Holders - Utah Political Finance{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-4xl font-bold mb-2">Candidates & Office Holders</h1>
+        <p class="text-base-content/60">Campaign finance data for all candidates and elected officials</p>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="stats stats-vertical lg:stats-horizontal shadow w-full mb-8">
+        <div class="stat">
+            <div class="stat-title">Total Candidates</div>
+            <div class="stat-value text-primary">{{ stats.total_candidates|intcomma }}</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-title">Total Raised</div>
+            <div class="stat-value text-success">${{ stats.total_raised|floatformat:0|intcomma }}</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-title">Total Spent</div>
+            <div class="stat-value text-error">${{ stats.total_spent|floatformat:0|intcomma }}</div>
+        </div>
+
+        <div class="stat">
+            <div class="stat-title">Total Reports</div>
+            <div class="stat-value text-secondary">{{ stats.total_reports|intcomma }}</div>
+        </div>
+    </div>
+
+    <!-- Candidates Table -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h2 class="card-title">All Candidates</h2>
+
+            <div class="overflow-x-auto">
+                <table class="table table-zebra w-full">
+                    <thead>
+                        <tr>
+                            <th>Candidate Name</th>
+                            <th class="text-center">Years Active</th>
+                            <th class="text-right">Total Raised</th>
+                            <th class="text-right">Total Spent</th>
+                            <th class="text-right">Reports</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for candidate in page_obj %}
+                        <tr class="hover">
+                            <td>
+                                <a href="{% url 'disclosures:candidate_detail' candidate.organization_name %}" class="link link-primary font-medium">
+                                    {{ candidate.organization_name }}
+                                </a>
+                            </td>
+                            <td class="text-center">
+                                {% if candidate.first_year and candidate.last_year %}
+                                    {% if candidate.first_year == candidate.last_year %}
+                                        {{ candidate.first_year }}
+                                    {% else %}
+                                        {{ candidate.first_year }}–{{ candidate.last_year }}
+                                    {% endif %}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td class="text-right">
+                                <span class="text-success font-semibold">
+                                    ${{ candidate.total_raised|floatformat:0|intcomma }}
+                                </span>
+                            </td>
+                            <td class="text-right">
+                                <span class="text-error font-semibold">
+                                    ${{ candidate.total_spent|floatformat:0|intcomma }}
+                                </span>
+                            </td>
+                            <td class="text-right">
+                                {{ candidate.report_count }}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center opacity-50">
+                                No candidates found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <div class="flex justify-center mt-6">
+                <div class="join">
+                    {% if page_obj.has_previous %}
+                        <a href="?page=1{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}" class="join-item btn btn-sm">«</a>
+                        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}" class="join-item btn btn-sm">‹</a>
+                    {% else %}
+                        <button class="join-item btn btn-sm btn-disabled">«</button>
+                        <button class="join-item btn btn-sm btn-disabled">‹</button>
+                    {% endif %}
+
+                    <button class="join-item btn btn-sm btn-active">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</button>
+
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}" class="join-item btn btn-sm">›</a>
+                        <a href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}" class="join-item btn btn-sm">»</a>
+                    {% else %}
+                        <button class="join-item btn btn-sm btn-disabled">›</button>
+                        <button class="join-item btn btn-sm btn-disabled">»</button>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

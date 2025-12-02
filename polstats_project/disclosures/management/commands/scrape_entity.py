@@ -5,8 +5,12 @@ from django.db import transaction
 from datetime import datetime
 from bs4 import BeautifulSoup
 import requests
+from decouple import config
 
 from ...models import EntityRegistration, EntityOfficer
+
+# Load custom User-Agent from environment
+USER_AGENT = config('USER_AGENT', default='PolStatsBot/1.0 (Utah Political Finance Data Aggregator)')
 
 
 class Command(BaseCommand):
@@ -88,7 +92,8 @@ class Command(BaseCommand):
         self.stdout.write(f'Fetching entity data from: {url}')
 
         try:
-            response = requests.get(url, timeout=30)
+            headers = {'User-Agent': USER_AGENT}
+            response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
         except requests.RequestException as e:
             raise CommandError(f'Error fetching entity page: {str(e)}')

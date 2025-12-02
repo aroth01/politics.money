@@ -10,7 +10,12 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import re
+import os
 from typing import Dict, List, Any
+from decouple import config
+
+# Load custom User-Agent from environment (defaults to a descriptive bot identifier)
+USER_AGENT = config('USER_AGENT', default='PolStatsBot/1.0 (Utah Political Finance Data Aggregator)')
 
 
 def clean_text(text: str) -> str:
@@ -65,8 +70,11 @@ def parse_lobbyist_entity(url: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing all parsed entity data
     """
-    # Fetch the page
-    response = requests.get(url, timeout=30)
+    # Fetch the page with custom User-Agent
+    headers = {
+        'User-Agent': USER_AGENT
+    }
+    response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()
 
     # Parse with BeautifulSoup

@@ -22,6 +22,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
 
+<!-- D3.js for visualizations -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
 <style>
     /* DataTables styling to match DaisyUI */
     .dataTables_wrapper {
@@ -283,6 +287,30 @@
             <div class="stat-title">Reports Filed</div>
             <div class="stat-value">{{ stats.report_count }}</div>
             <div class="stat-desc">Latest: {{ stats.latest_report|date:"M d, Y" }}</div>
+        </div>
+    </div>
+
+    <!-- In-State Contribution Gauge -->
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <h2 class="card-title">Contribution Source</h2>
+                    <p class="text-sm text-gray-500">In-state vs out-of-state contributors</p>
+                </div>
+                <div class="ml-4 flex-shrink-0 group relative">
+                    <svg class="w-5 h-5 text-gray-400 hover:text-gray-600 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div class="invisible group-hover:visible absolute right-0 top-6 w-80 bg-gray-900 text-white text-xs rounded-lg p-3 z-10 shadow-lg">
+                        <p class="font-semibold mb-2">About PAC Contributions:</p>
+                        <p class="mb-2">This shows the geographic distribution of contributions to this PAC based on contributor addresses. Only contributions over $50 are required to be itemized with addresses.</p>
+                    </div>
+                </div>
+            </div>
+            <div id="instateGauge" class="flex items-center justify-center" style="height: 200px;">
+                <div class="text-gray-400">Loading...</div>
+            </div>
         </div>
     </div>
 
@@ -859,5 +887,146 @@
             }, 10);
         });
     });
+
+    // Fetch and render in-state percentage gauge
+    const instateApiUrl = "{% url 'disclosures:api_pac_instate_percentage' organization_name %}" + (year ? `?year=${year}` : '');
+    fetch(instateApiUrl)
+        .then(response => response.json())
+        .then(data => {
+            renderGauge(data);
+        })
+        .catch(error => {
+            console.error('Error loading in-state data:', error);
+            document.getElementById('instateGauge').innerHTML = '<p class="text-gray-500">Unable to load data</p>';
+        });
+
+    function renderGauge(data) {
+        const container = document.getElementById('instateGauge');
+        const width = 600;
+        const height = 200;
+
+        container.innerHTML = '';
+
+        const svg = d3.select('#instateGauge')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+        const centerX = width / 2;
+        const centerY = height - 20;
+        const radius = 120;
+
+        // Create arc generator
+        const arc = d3.arc()
+            .innerRadius(radius - 30)
+            .outerRadius(radius)
+            .startAngle(-Math.PI / 2)
+            .cornerRadius(5);
+
+        // Background arc (full semicircle)
+        svg.append('path')
+            .attr('d', arc({endAngle: Math.PI / 2}))
+            .attr('transform', `translate(${centerX}, ${centerY})`)
+            .attr('fill', '#e5e7eb');
+
+        // In-state arc (green)
+        const instateAngle = -Math.PI / 2 + (data.instate_percentage / 100) * Math.PI;
+        svg.append('path')
+            .attr('d', arc({endAngle: instateAngle}))
+            .attr('transform', `translate(${centerX}, ${centerY})`)
+            .attr('fill', '#10b981');
+
+        // Out-of-state arc (red)
+        const outstateAngle = instateAngle + (data.outstate_percentage / 100) * Math.PI;
+        const outstateArc = d3.arc()
+            .innerRadius(radius - 30)
+            .outerRadius(radius)
+            .startAngle(instateAngle)
+            .cornerRadius(5);
+
+        svg.append('path')
+            .attr('d', outstateArc({endAngle: outstateAngle}))
+            .attr('transform', `translate(${centerX}, ${centerY})`)
+            .attr('fill', '#ef4444');
+
+        // Unknown/no address arc (gray) - if any
+        if (data.unknown_percentage > 0) {
+            const unknownArc = d3.arc()
+                .innerRadius(radius - 30)
+                .outerRadius(radius)
+                .startAngle(outstateAngle)
+                .cornerRadius(5);
+
+            svg.append('path')
+                .attr('d', unknownArc({endAngle: Math.PI / 2}))
+                .attr('transform', `translate(${centerX}, ${centerY})`)
+                .attr('fill', '#9ca3af');
+        }
+
+        // Center text - main percentage
+        svg.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY - 15)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '36px')
+            .attr('font-weight', 'bold')
+            .attr('fill', '#10b981')
+            .text(`${data.instate_percentage.toFixed(1)}%`);
+
+        svg.append('text')
+            .attr('x', centerX)
+            .attr('y', centerY + 10)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '14px')
+            .attr('fill', '#6b7280')
+            .text('In-State');
+
+        // Labels
+        const labelY = centerY + 40;
+
+        // In-state label
+        svg.append('circle')
+            .attr('cx', centerX - 120)
+            .attr('cy', labelY)
+            .attr('r', 5)
+            .attr('fill', '#10b981');
+
+        svg.append('text')
+            .attr('x', centerX - 110)
+            .attr('y', labelY + 4)
+            .attr('font-size', '12px')
+            .attr('fill', '#374151')
+            .text(`Utah: ${data.instate_percentage.toFixed(1)}% ($${(data.instate_amount / 1000000).toFixed(2)}M)`);
+
+        // Out-of-state label
+        svg.append('circle')
+            .attr('cx', centerX + 10)
+            .attr('cy', labelY)
+            .attr('r', 5)
+            .attr('fill', '#ef4444');
+
+        svg.append('text')
+            .attr('x', centerX + 20)
+            .attr('y', labelY + 4)
+            .attr('font-size', '12px')
+            .attr('fill', '#374151')
+            .text(`Out-of-State: ${data.outstate_percentage.toFixed(1)}% ($${(data.outstate_amount / 1000000).toFixed(2)}M)`);
+
+        // Unknown label (if significant)
+        if (data.unknown_percentage > 0.5) {
+            svg.append('circle')
+                .attr('cx', centerX - 60)
+                .attr('cy', labelY + 20)
+                .attr('r', 5)
+                .attr('fill', '#9ca3af');
+
+            svg.append('text')
+                .attr('x', centerX - 50)
+                .attr('y', labelY + 24)
+                .attr('font-size', '12px')
+                .attr('fill', '#6b7280')
+                .text(`Unknown: ${data.unknown_percentage.toFixed(1)}%`);
+        }
+    }
 </script>
 {% endblock %}
