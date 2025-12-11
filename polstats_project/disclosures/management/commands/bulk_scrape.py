@@ -137,100 +137,76 @@ class Command(BaseCommand):
         return entities
 
     def scrape_report_list(self, start_page=1, max_pages=None):
-        """Scrape list of reports from search page using skip parameter."""
-        self.stdout.write('Fetching report list from public search...')
+        """Discover reports by iterating through report IDs."""
+        self.stdout.write('Discovering reports by ID range...')
 
         reports = []
-        skip = (start_page - 1) * 30  # Assuming 30 results per page
-        page = start_page
+
+        # Find the current maximum report ID in our database
+        max_existing_id = DisclosureReport.objects.aggregate(
+            max_id=models.Max('report_id')
+        )['max_id']
+
+        if max_existing_id:
+            start_id = int(max_existing_id)
+            self.stdout.write(f'Starting from existing max ID: {start_id}')
+        else:
+            # Start from a reasonable ID if we have none
+            start_id = 180000  # Based on the example ID 197193
+            self.stdout.write(f'No existing reports, starting from: {start_id}')
+
+        # Check backwards from start_id and forward
+        # This catches any reports we might have missed
+        test_range = list(range(max(1, start_id - 1000), start_id)) + list(range(start_id, start_id + 5000))
+
+        self.stdout.write(f'Testing {len(test_range)} potential report IDs...')
+
         consecutive_failures = 0
+        max_consecutive_failures = 100  # Stop after 100 consecutive non-existent IDs
 
-        while True:
-            if max_pages and (page - start_page) >= max_pages:
-                break
-
-            # Try different URL patterns to find reports
-            # Pattern 1: Using skip parameter
-            url = f'https://disclosures.utah.gov/Search/PublicSearch?Skip={skip}'
+        for report_id in test_range:
+            url = f'https://disclosures.utah.gov/Search/PublicSearch/Report/{report_id}'
 
             try:
                 headers = {'User-Agent': USER_AGENT}
-                response = requests.get(url, headers=headers, timeout=30)
-                if response.status_code != 200:
-                    self.stdout.write(
-                        self.style.WARNING(f'Failed to fetch skip={skip}, status: {response.status_code}')
-                    )
+                response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
+
+                if response.status_code == 200:
+                    # Report exists!
+                    consecutive_failures = 0
+                    reports.append({
+                        'report_id': str(report_id),
+                        'url': url
+                    })
+
+                    if len(reports) % 10 == 0:
+                        self.stdout.write(f'Found {len(reports)} reports so far...')
+
+                elif response.status_code == 404:
+                    # Report doesn't exist
                     consecutive_failures += 1
-                    if consecutive_failures >= 3:
+                    if consecutive_failures >= max_consecutive_failures:
+                        self.stdout.write(f'Stopped after {max_consecutive_failures} consecutive non-existent IDs')
                         break
-                    skip += 30
-                    page += 1
-                    continue
 
-                soup = BeautifulSoup(response.content, 'html.parser')
-
-                # Look for report detail links
-                # Format: /Search/PublicSearch/Report/{report_id}
-                links = soup.find_all('a', href=lambda href: href and '/Report/' in href)
-
-                if not links:
-                    # Try finding any numeric IDs in the page
-                    # Sometimes IDs are in data attributes or onclick handlers
-                    self.stdout.write(f'No report links found at skip={skip}')
-                    consecutive_failures += 1
-                    if consecutive_failures >= 3:
-                        self.stdout.write('No more reports found after 3 consecutive failures')
-                        break
-                    skip += 30
-                    page += 1
-                    time.sleep(self.delay)
-                    continue
-
-                consecutive_failures = 0  # Reset on success
-                page_reports = []
-
-                for link in links:
-                    href = link.get('href', '')
-                    # Extract report ID from various possible formats
-                    if '/Report/' in href:
-                        report_id = href.split('/Report/')[-1].split('?')[0].split('/')[0]
-                        if report_id.isdigit():
-                            full_url = href if href.startswith('http') else f'https://disclosures.utah.gov{href}'
-                            page_reports.append({
-                                'report_id': report_id,
-                                'url': full_url
-                            })
-
-                # Remove duplicates
-                unique_reports = []
-                seen_ids = set()
-                for rep in page_reports:
-                    if rep['report_id'] not in seen_ids:
-                        unique_reports.append(rep)
-                        seen_ids.add(rep['report_id'])
-
-                if not unique_reports:
-                    consecutive_failures += 1
-                    if consecutive_failures >= 3:
-                        break
-                else:
-                    reports.extend(unique_reports)
-                    self.stdout.write(f'Skip {skip}: Found {len(unique_reports)} reports (Total: {len(reports)})')
-
-                skip += 30
-                page += 1
                 time.sleep(self.delay)
 
+            except requests.Timeout:
+                self.stdout.write(
+                    self.style.WARNING(f'Timeout checking report {report_id} - skipping')
+                )
+                # Don't count timeouts as consecutive failures
+                time.sleep(self.delay * 2)
             except Exception as e:
                 self.stdout.write(
-                    self.style.ERROR(f'Error fetching skip={skip}: {str(e)}')
+                    self.style.WARNING(f'Error checking report {report_id}: {str(e)}')
                 )
                 consecutive_failures += 1
-                if consecutive_failures >= 3:
+                if consecutive_failures >= max_consecutive_failures:
                     break
-                skip += 30
-                page += 1
                 time.sleep(self.delay)
+
+        self.stdout.write(f'Report discovery complete. Found {len(reports)} reports.')
 
         return reports
 
