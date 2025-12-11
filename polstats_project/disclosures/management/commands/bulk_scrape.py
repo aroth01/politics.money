@@ -137,78 +137,13 @@ class Command(BaseCommand):
         return entities
 
     def scrape_report_list(self, start_page=1, max_pages=None):
-        """Discover reports by iterating through report IDs."""
-        self.stdout.write('Discovering reports by ID range...')
+        """Discover reports by iterating through report IDs.
 
-        reports = []
-
-        # Find the current maximum report ID in our database
-        max_existing_id = DisclosureReport.objects.aggregate(
-            max_id=models.Max('report_id')
-        )['max_id']
-
-        if max_existing_id:
-            start_id = int(max_existing_id)
-            self.stdout.write(f'Starting from existing max ID: {start_id}')
-        else:
-            # Start from a reasonable ID if we have none
-            start_id = 180000  # Based on the example ID 197193
-            self.stdout.write(f'No existing reports, starting from: {start_id}')
-
-        # Check backwards from start_id and forward
-        # This catches any reports we might have missed
-        test_range = list(range(max(1, start_id - 1000), start_id)) + list(range(start_id, start_id + 5000))
-
-        self.stdout.write(f'Testing {len(test_range)} potential report IDs...')
-
-        consecutive_failures = 0
-        max_consecutive_failures = 100  # Stop after 100 consecutive non-existent IDs
-
-        for report_id in test_range:
-            url = f'https://disclosures.utah.gov/Search/PublicSearch/Report/{report_id}'
-
-            try:
-                headers = {'User-Agent': USER_AGENT}
-                response = requests.get(url, headers=headers, timeout=30, allow_redirects=False)
-
-                if response.status_code == 200:
-                    # Report exists!
-                    consecutive_failures = 0
-                    reports.append({
-                        'report_id': str(report_id),
-                        'url': url
-                    })
-
-                    if len(reports) % 10 == 0:
-                        self.stdout.write(f'Found {len(reports)} reports so far...')
-
-                elif response.status_code == 404:
-                    # Report doesn't exist
-                    consecutive_failures += 1
-                    if consecutive_failures >= max_consecutive_failures:
-                        self.stdout.write(f'Stopped after {max_consecutive_failures} consecutive non-existent IDs')
-                        break
-
-                time.sleep(self.delay)
-
-            except requests.Timeout:
-                self.stdout.write(
-                    self.style.WARNING(f'Timeout checking report {report_id} - skipping')
-                )
-                # Don't count timeouts as consecutive failures
-                time.sleep(self.delay * 2)
-            except Exception as e:
-                self.stdout.write(
-                    self.style.WARNING(f'Error checking report {report_id}: {str(e)}')
-                )
-                consecutive_failures += 1
-                if consecutive_failures >= max_consecutive_failures:
-                    break
-                time.sleep(self.delay)
-
-        self.stdout.write(f'Report discovery complete. Found {len(reports)} reports.')
-
-        return reports
+        Note: This just returns a list for compatibility, but actual scraping
+        happens in bulk_scrape_reports() which scrapes as it discovers.
+        """
+        # This is now just a placeholder - actual work is done in bulk_scrape_reports
+        return []
 
     def bulk_scrape_entities(self, limit=None, update_existing=False):
         """Bulk scrape entities."""
@@ -259,52 +194,80 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'\n=== Entity Scraping Complete ==='))
         self.stdout.write(f'Success: {success_count}, Errors: {error_count}, Skipped: {skipped_count}')
 
-    def bulk_scrape_reports(self, limit=None, update_existing=False, start_page=1, max_pages=None):
-        """Bulk scrape reports."""
+    def bulk_scrape_reports(self, limit=None, update_existing=False):
+        """Bulk scrape reports by ID incrementing - discover and scrape in one pass."""
         self.stdout.write(self.style.SUCCESS('\n=== Starting Report Scraping ===\n'))
 
-        reports = self.scrape_report_list(start_page=start_page, max_pages=max_pages)
+        # Find the current maximum report ID in our database
+        max_existing_id = DisclosureReport.objects.aggregate(
+            max_id=models.Max('report_id')
+        )['max_id']
 
-        if limit:
-            reports = reports[:limit]
+        if max_existing_id:
+            start_id = int(max_existing_id)
+            self.stdout.write(f'Starting from existing max ID: {start_id}')
+        else:
+            # Start from a reasonable ID if we have none
+            start_id = 180000
+            self.stdout.write(f'No existing reports, starting from: {start_id}')
 
-        self.stdout.write(f'Will scrape {len(reports)} reports')
+        # Hard limit at 300000
+        max_report_id = 300000
+        self.stdout.write(f'Will check report IDs from {start_id} to {max_report_id}')
 
         success_count = 0
         error_count = 0
         skipped_count = 0
 
-        for idx, report in enumerate(reports, 1):
-            report_id = report['report_id']
-            report_url = report['url']
+        for report_id in range(start_id, max_report_id + 1):
+            # Check limit
+            if limit and (success_count + skipped_count) >= limit:
+                self.stdout.write(f'Reached limit of {limit} reports')
+                break
+
+            url = f'https://disclosures.utah.gov/Search/PublicSearch/Report/{report_id}'
 
             # Check if already exists
             if not update_existing:
-                if DisclosureReport.objects.filter(report_id=report_id).exists():
-                    self.stdout.write(f'[{idx}/{len(reports)}] Skipping Report {report_id} - already exists')
+                if DisclosureReport.objects.filter(report_id=str(report_id)).exists():
                     skipped_count += 1
+                    if skipped_count % 100 == 0:
+                        self.stdout.write(f'Skipped {skipped_count} existing reports...')
                     continue
 
-            self.stdout.write(f'[{idx}/{len(reports)}] Scraping Report {report_id}...')
-
             try:
-                # Call the import_disclosure command
-                call_command(
-                    'import_disclosure',
-                    report_url,
-                    update=update_existing,
-                    report_id=report_id,
-                    stdout=self.stdout if self.verbosity >= 2 else None
-                )
-                success_count += 1
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Success'))
+                # Try to scrape the report
+                headers = {'User-Agent': USER_AGENT}
+                response = requests.head(url, headers=headers, timeout=10, allow_redirects=False)
 
+                # If page exists, scrape it
+                if response.status_code == 200:
+                    self.stdout.write(f'Scraping Report {report_id}...')
+
+                    try:
+                        call_command(
+                            'import_disclosure',
+                            url,
+                            update=update_existing,
+                            report_id=str(report_id),
+                            stdout=self.stdout if self.verbosity >= 2 else None
+                        )
+                        success_count += 1
+                        self.stdout.write(self.style.SUCCESS(f'  ✓ Success ({success_count} total)'))
+
+                    except Exception as e:
+                        error_count += 1
+                        self.stdout.write(self.style.ERROR(f'  ✗ Error: {str(e)}'))
+
+                    # Rate limiting after successful scrape
+                    time.sleep(self.delay)
+
+            except requests.Timeout:
+                self.stdout.write(self.style.WARNING(f'Timeout checking report {report_id} - skipping'))
+                time.sleep(self.delay * 2)
             except Exception as e:
-                error_count += 1
-                self.stdout.write(self.style.ERROR(f'  ✗ Error: {str(e)}'))
-
-            # Rate limiting
-            time.sleep(self.delay)
+                # Silently skip connection errors, etc
+                pass
 
         self.stdout.write(self.style.SUCCESS(f'\n=== Report Scraping Complete ==='))
         self.stdout.write(f'Success: {success_count}, Errors: {error_count}, Skipped: {skipped_count}')
@@ -313,8 +276,6 @@ class Command(BaseCommand):
         scrape_type = options['type']
         limit = options.get('limit')
         update_existing = options['update_existing']
-        start_page = options['start_page']
-        max_pages = options.get('max_pages')
         self.delay = options['delay']
         self.verbosity = options['verbosity']
 
@@ -340,9 +301,7 @@ class Command(BaseCommand):
             if scrape_type in ['reports', 'all']:
                 self.bulk_scrape_reports(
                     limit=limit,
-                    update_existing=update_existing,
-                    start_page=start_page,
-                    max_pages=max_pages
+                    update_existing=update_existing
                 )
 
         except KeyboardInterrupt:
