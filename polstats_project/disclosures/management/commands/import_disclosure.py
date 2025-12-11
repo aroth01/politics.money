@@ -83,6 +83,18 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('Data fetched successfully'))
 
+        # Check if report is blank (all zero transactions)
+        balance = data.get('balance_summary', {})
+        total_contrib = self._get_decimal(balance.get('Total Contributions Received')) or Decimal('0')
+        total_expend = self._get_decimal(balance.get('Total Expenditures Made')) or Decimal('0')
+        contributions = data.get('contributions', [])
+        expenditures = data.get('expenditures', [])
+
+        if total_contrib == 0 and total_expend == 0 and not contributions and not expenditures:
+            raise CommandError(
+                f'Report {report_id} is blank (no contributions or expenditures). Skipping.'
+            )
+
         # Import data in a transaction
         with transaction.atomic():
             # Create or update the main report
@@ -113,17 +125,12 @@ class Command(BaseCommand):
             report.due_date = self.parse_date(report_info.get('Due Date', ''))
             report.submit_date = self.parse_date(report_info.get('Submit Date', ''))
 
-            # Set balance summary fields
-            balance = data.get('balance_summary', {})
+            # Set balance summary fields (balance was already extracted above for blank check)
             report.balance_beginning = self._get_decimal(
                 balance.get('Balance at Beginning of Reporting Period')
             )
-            report.total_contributions = self._get_decimal(
-                balance.get('Total Contributions Received')
-            )
-            report.total_expenditures = self._get_decimal(
-                balance.get('Total Expenditures Made')
-            )
+            report.total_contributions = total_contrib
+            report.total_expenditures = total_expend
             report.ending_balance = self._get_decimal(
                 balance.get('Ending Balance')
             )
@@ -131,8 +138,7 @@ class Command(BaseCommand):
             report.last_scraped_at = timezone.now()
             report.save()
 
-            # Import contributions
-            contributions = data.get('contributions', [])
+            # Import contributions (contributions was already extracted above for blank check)
             self.stdout.write(f'Importing {len(contributions)} contributions...')
 
             for contrib_data in contributions:
@@ -149,8 +155,7 @@ class Command(BaseCommand):
                 )
                 contribution.save()
 
-            # Import expenditures
-            expenditures = data.get('expenditures', [])
+            # Import expenditures (expenditures was already extracted above for blank check)
             self.stdout.write(f'Importing {len(expenditures)} expenditures...')
 
             for exp_data in expenditures:

@@ -255,6 +255,15 @@ class Command(BaseCommand):
                         success_count += 1
                         self.stdout.write(self.style.SUCCESS(f'  ✓ Success ({success_count} total)'))
 
+                    except CommandError as e:
+                        # Check if this is a blank report (should be skipped, not an error)
+                        if 'is blank' in str(e):
+                            skipped_count += 1
+                            if self.verbosity >= 1:
+                                self.stdout.write(f'  - Blank report, skipping')
+                        else:
+                            error_count += 1
+                            self.stdout.write(self.style.ERROR(f'  ✗ Error: {str(e)}'))
                     except Exception as e:
                         error_count += 1
                         self.stdout.write(self.style.ERROR(f'  ✗ Error: {str(e)}'))
