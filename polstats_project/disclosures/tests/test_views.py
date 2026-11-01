@@ -26,6 +26,129 @@ class IndexViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'disclosures/index.html')
 
+    def test_index_view_empty_database(self):
+        """Overview renders with zeroed figures when nothing is imported."""
+        response = self.client.get(reverse('disclosures:index'))
+        self.assertEqual(response.context['stats']['total_filers'], 0)
+        self.assertEqual(response.context['fundraisers']['rows'], [])
+        self.assertEqual(response.context['in_state_cents'], 0)
+        self.assertContains(response, 'No reports on file yet')
+
+
+class OverviewFiguresTest(TestCase):
+    """Test the aggregates behind the overview page."""
+
+    def setUp(self):
+        self.client = Client()
+        self.candidate = DisclosureReport.objects.create(
+            report_id='CAND-1',
+            source_url='https://example.com/report/1',
+            organization_name='Jane Candidate',
+            organization_type='Candidates & Office Holders',
+            total_contributions=Decimal('30000.00'),
+            total_expenditures=Decimal('40000.00'),
+            end_date=date(2024, 6, 30),
+        )
+        self.pac = DisclosureReport.objects.create(
+            report_id='PAC-1',
+            source_url='https://example.com/report/2',
+            organization_name='Good Government PAC',
+            organization_type='Political Action Committee',
+            total_contributions=Decimal('10000.00'),
+            total_expenditures=Decimal('5000.00'),
+            end_date=date(2023, 12, 31),
+        )
+        gifts = [
+            ('Small Donor', '10 Main St, Provo, UT 84601', '25.00', date(2024, 1, 5)),
+            ('Mid Donor', '20 Main St, Ogden, UT 84401', '100.00', date(2024, 2, 5)),
+            ('Large Donor', '30 Market St, San Francisco, CA 94105', '10000.00', date(2024, 3, 5)),
+            ('Mystery Donor', '', '500.00', date(2024, 3, 9)),
+        ]
+        for name, address, amount, received in gifts:
+            Contribution.objects.create(
+                report=self.candidate,
+                contributor_name=name,
+                address=address,
+                amount=Decimal(amount),
+                date_received=received,
+            )
+        Contribution.objects.create(
+            report=self.pac,
+            contributor_name='Capital Donor',
+            address='1 K St NW, Washington, DC 20001',
+            amount=Decimal('2000.00'),
+            date_received=date(2023, 11, 1),
+        )
+        Expenditure.objects.create(
+            report=self.candidate,
+            recipient_name='Print Shop',
+            amount=Decimal('750.00'),
+            date=date(2024, 3, 20),
+        )
+
+    def test_key_figures(self):
+        response = self.client.get(reverse('disclosures:index'))
+        stats = response.context['stats']
+        self.assertEqual(stats['total_reports'], 2)
+        self.assertEqual(stats['total_filers'], 2)
+        self.assertEqual(stats['total_contributions'], 5)
+        self.assertEqual(stats['total_contribution_amount'], Decimal('12625.00'))
+        self.assertEqual(stats['total_expenditures'], 1)
+        self.assertEqual(stats['total_expenditure_amount'], Decimal('750.00'))
+
+    def test_gift_size_bands(self):
+        response = self.client.get(reverse('disclosures:index'))
+        bands = response.context['gift_bands']
+        self.assertEqual([b['count'] for b in bands], [1, 1, 1, 1, 1])
+        self.assertEqual(bands[0]['count_pct'], 20.0)
+        self.assertEqual(bands[-1]['dollar_pct'], 79.2)
+        self.assertEqual(response.context['large_gift_count'], 1)
+        self.assertEqual(response.context['small_gift_share'], 20.0)
+        self.assertContains(response, 'Where Utah')
+
+    def test_top_fundraisers(self):
+        response = self.client.get(reverse('disclosures:index'))
+        fundraisers = response.context['fundraisers']
+        self.assertEqual([r['name'] for r in fundraisers['rows']], ['Jane Candidate', 'Good Government PAC'])
+        top = fundraisers['rows'][0]
+        self.assertEqual(top['detail_url_name'], 'disclosures:candidate_detail')
+        self.assertEqual(top['spent_pct'], 80.0)
+        self.assertEqual(fundraisers['rows'][1]['detail_url_name'], 'disclosures:pac_detail')
+        self.assertEqual(fundraisers['biggest_overspend']['name'], 'Jane Candidate')
+        self.assertEqual(fundraisers['ticks'][-1]['value'], 50000.0)
+        self.assertContains(response, reverse('disclosures:candidate_detail', args=['Jane Candidate']))
+
+    def test_geography(self):
+        response = self.client.get(reverse('disclosures:index'))
+        tiles = {t['code']: t for t in response.context['tiles']}
+        self.assertEqual(tiles['UT']['value'], Decimal('125.00'))
+        self.assertEqual(tiles['CA']['value'], Decimal('10000.00'))
+        self.assertEqual(tiles['DC']['value'], Decimal('2000.00'))
+        self.assertEqual(tiles['NY']['value'], Decimal('0'))
+        self.assertEqual(response.context['top_state_code'], 'CA')
+        self.assertEqual(response.context['in_state_cents'], 1)
+        self.assertEqual(response.context['out_of_state_total'], Decimal('12000.00'))
+        self.assertEqual(response.context['other_state_count'], 1)
+        self.assertTrue(response.context['has_dc'])
+        self.assertEqual(response.context['unreadable_share'], 4)
+
+    def test_year_filter_applies_to_overview(self):
+        response = self.client.get(reverse('disclosures:index'), {'year': '2023'})
+        self.assertEqual(response.context['stats']['total_reports'], 1)
+        self.assertEqual(response.context['stats']['total_contribution_amount'], Decimal('2000.00'))
+        self.assertEqual([r['name'] for r in response.context['fundraisers']['rows']], ['Good Government PAC'])
+        self.assertEqual(response.context['top_state_code'], 'DC')
+
+    def test_global_timeline_respects_year(self):
+        all_years = self.client.get(reverse('disclosures:api_global_timeline')).json()
+        self.assertEqual(len(all_years['contributions']), 4)
+        self.assertEqual(all_years['contributions'][0]['date'], '2023-11-01')
+        one_year = self.client.get(reverse('disclosures:api_global_timeline'), {'year': '2024'}).json()
+        self.assertEqual([m['date'] for m in one_year['contributions']], ['2024-01-01', '2024-02-01', '2024-03-01'])
+        self.assertEqual(one_year['contributions'][2]['amount'], 10500.0)
+        self.assertEqual(one_year['contributions'][2]['count'], 2)
+        self.assertEqual(len(one_year['expenditures']), 1)
+
 
 class ReportsListViewTest(TestCase):
     """Test reports list view."""

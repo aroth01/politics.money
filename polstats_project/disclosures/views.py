@@ -8,6 +8,93 @@ from django_ratelimit.decorators import ratelimit
 from .models import DisclosureReport, Contribution, Expenditure
 from decimal import Decimal
 from urllib.parse import unquote
+import math
+import re
+
+
+# US state and district codes, used to read a state from a contributor address.
+STATE_CODES = [
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'
+]
+
+STATE_NAMES = {
+    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+    'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'DC': 'District of Columbia',
+    'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois',
+    'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana',
+    'ME': 'Maine', 'MD': 'Maryland', 'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota',
+    'MS': 'Mississippi', 'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+    'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+    'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma', 'OR': 'Oregon',
+    'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina', 'SD': 'South Dakota',
+    'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont', 'VA': 'Virginia',
+    'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',
+}
+
+# Tile map layout for the overview page: (state code, row, column), zero-based.
+STATE_TILES = [
+    ('AK', 0, 0), ('ME', 0, 10), ('WI', 1, 5), ('VT', 1, 9), ('NH', 1, 10),
+    ('WA', 2, 0), ('ID', 2, 1), ('MT', 2, 2), ('ND', 2, 3), ('MN', 2, 4), ('IL', 2, 5),
+    ('MI', 2, 6), ('NY', 2, 8), ('MA', 2, 9),
+    ('OR', 3, 0), ('NV', 3, 1), ('WY', 3, 2), ('SD', 3, 3), ('IA', 3, 4), ('IN', 3, 5),
+    ('OH', 3, 6), ('PA', 3, 7), ('NJ', 3, 8), ('CT', 3, 9), ('RI', 3, 10),
+    ('CA', 4, 0), ('UT', 4, 1), ('CO', 4, 2), ('NE', 4, 3), ('MO', 4, 4), ('KY', 4, 5),
+    ('WV', 4, 6), ('VA', 4, 7), ('MD', 4, 8), ('DE', 4, 9),
+    ('AZ', 5, 1), ('NM', 5, 2), ('KS', 5, 3), ('AR', 5, 4), ('TN', 5, 5), ('NC', 5, 6),
+    ('SC', 5, 7), ('DC', 5, 8),
+    ('OK', 6, 3), ('LA', 6, 4), ('MS', 6, 5), ('AL', 6, 6), ('GA', 6, 7),
+    ('HI', 7, 0), ('TX', 7, 3), ('FL', 7, 8),
+]
+
+# Sequential "sand" ramp shared by the overview charts, lightest to darkest,
+# with a text color that passes contrast on each step.
+SAND_RAMP = ['#DE9A60', '#D5753A', '#C45218', '#A33810', '#7B2815']
+SAND_RAMP_TEXT = ['#1B2423', '#1B2423', '#FFFFFF', '#FFFFFF', '#FFFFFF']
+
+# Gift size bands: (label, inclusive lower bound, exclusive upper bound).
+GIFT_SIZE_BANDS = [
+    ('Under $50', None, Decimal('50')),
+    ('$50–249', Decimal('50'), Decimal('250')),
+    ('$250–999', Decimal('250'), Decimal('1000')),
+    ('$1,000–9,999', Decimal('1000'), Decimal('10000')),
+    ('$10,000 and up', Decimal('10000'), None),
+]
+
+# Dollar thresholds for the state tile map shading.
+STATE_MAP_BINS = [10000, 50000, 150000, 500000]
+
+
+def compact_dollars(value):
+    """10000 -> '10K', 2500000 -> '2.5M', for legend labels."""
+    value = float(value)
+    if value >= 1_000_000:
+        return f'{value / 1_000_000:g}M'
+    if value >= 1_000:
+        return f'{value / 1_000:g}K'
+    return f'{value:g}'
+
+
+def bin_labels(thresholds):
+    """Legend labels for threshold bins: ['< $10K', '$10–50K', ..., '$500K+']."""
+    labels = []
+    for i in range(len(thresholds) + 1):
+        low = thresholds[i - 1] if i > 0 else None
+        high = thresholds[i] if i < len(thresholds) else None
+        if low is None:
+            labels.append(f'< ${compact_dollars(high)}')
+        elif high is None:
+            labels.append(f'${compact_dollars(low)}+')
+        else:
+            low_text, high_text = compact_dollars(low), compact_dollars(high)
+            if low_text[-1] == high_text[-1] and low_text[-1] in 'KM':
+                labels.append(f'${low_text[:-1]}–{high_text}')
+            else:
+                labels.append(f'${low_text}–${high_text}')
+    return labels
 
 
 def get_year_filtered_reports(request):
@@ -52,55 +139,236 @@ def about(request):
     return render(request, 'disclosures/about.html')
 
 
+def pct(part, whole):
+    """Percentage of whole, rounded to one decimal, safe for zero."""
+    if not whole:
+        return 0.0
+    return round(float(part) / float(whole) * 100, 1)
+
+
+def nice_scale(max_value, ticks=5):
+    """Return (tick values, top) for an axis that covers max_value in round steps."""
+    max_value = float(max_value or 0)
+    if max_value <= 0:
+        return [0.0], 1.0
+    raw = max_value / ticks
+    magnitude = 10 ** math.floor(math.log10(raw))
+    step = magnitude
+    for multiplier in (1, 2, 2.5, 5, 10):
+        step = multiplier * magnitude
+        if step * ticks >= max_value:
+            break
+    return [step * i for i in range(ticks + 1)], step * ticks
+
+
+def gift_size_breakdown(contributions):
+    """Count and sum contributions in each gift size band, with their shares."""
+    aggregates = {}
+    for i, (label, low, high) in enumerate(GIFT_SIZE_BANDS):
+        condition = Q()
+        if low is not None:
+            condition &= Q(amount__gte=low)
+        if high is not None:
+            condition &= Q(amount__lt=high)
+        aggregates[f'count_{i}'] = Count('id', filter=condition)
+        aggregates[f'total_{i}'] = Sum('amount', filter=condition)
+    totals = contributions.aggregate(**aggregates)
+
+    bands = []
+    for i, (label, low, high) in enumerate(GIFT_SIZE_BANDS):
+        bands.append({
+            'label': label,
+            'color': SAND_RAMP[i],
+            'text_color': SAND_RAMP_TEXT[i],
+            'count': totals[f'count_{i}'] or 0,
+            'total': totals[f'total_{i}'] or Decimal('0'),
+        })
+
+    all_count = sum(b['count'] for b in bands)
+    all_total = sum(b['total'] for b in bands)
+    count_cursor = 0.0
+    dollar_cursor = 0.0
+    for band in bands:
+        band['count_pct'] = pct(band['count'], all_count)
+        band['dollar_pct'] = pct(band['total'], all_total)
+        # Ribbon polygon joining the two bars: a 1000 x 80 viewBox.
+        count_end = count_cursor + band['count_pct'] * 10
+        dollar_end = dollar_cursor + band['dollar_pct'] * 10
+        band['ribbon_points'] = '{:.1f},0 {:.1f},0 {:.1f},80 {:.1f},80'.format(
+            count_cursor, count_end, dollar_end, dollar_cursor
+        )
+        count_cursor = count_end
+        dollar_cursor = dollar_end
+    return bands
+
+
+def top_fundraisers(reports, limit=10):
+    """Filers ranked by money raised, with spending placed on the same scale."""
+    rows = list(
+        reports
+        .exclude(organization_name='')
+        .values('organization_name')
+        .annotate(
+            raised=Sum('total_contributions'),
+            spent=Sum('total_expenditures'),
+            org_type=Max('organization_type'),
+        )
+        .order_by('-raised')[:limit]
+    )
+    for row in rows:
+        row['raised'] = row['raised'] or Decimal('0')
+        row['spent'] = row['spent'] or Decimal('0')
+
+    max_value = max([max(r['raised'], r['spent']) for r in rows] or [0])
+    ticks, top = nice_scale(max_value)
+
+    filers = []
+    biggest_overspend = None
+    for row in rows:
+        raised_pct = pct(row['raised'], top)
+        spent_pct = pct(row['spent'], top)
+        diff = row['spent'] - row['raised']
+        org_type = row['org_type'] or ''
+        if org_type == 'Candidates & Office Holders':
+            detail_url_name = 'disclosures:candidate_detail'
+        elif 'Political Action Committee' in org_type:
+            detail_url_name = 'disclosures:pac_detail'
+        else:
+            detail_url_name = ''
+        filer = {
+            'name': row['organization_name'],
+            'detail_url_name': detail_url_name,
+            'raised': row['raised'],
+            'spent': row['spent'],
+            'raised_pct': raised_pct,
+            'spent_pct': spent_pct,
+            'gap_left': min(raised_pct, spent_pct),
+            'gap_width': abs(raised_pct - spent_pct),
+            'diff': diff,
+            'show_diff': abs(raised_pct - spent_pct) >= 8,
+        }
+        filers.append(filer)
+        if diff > 0 and (biggest_overspend is None or diff > biggest_overspend['diff']):
+            biggest_overspend = filer
+
+    return {
+        'rows': filers,
+        'ticks': [{'value': t, 'frac': '{:.2f}'.format(t / top if top else 0)} for t in ticks],
+        'biggest_overspend': biggest_overspend,
+    }
+
+
+def contributions_by_state(contributions):
+    """Total dollars per state code, read from contributor addresses.
+
+    Utah is totalled with one database query; the smaller out-of-state set is
+    grouped in Python, matching the out-of-state map API.
+    """
+    addressed = contributions.exclude(address='').exclude(address=None)
+
+    utah_total = addressed.filter(
+        Q(address__iregex=r'[,\s]UT(?:\s+\d{5}(?:-\d{4})?)?\s*$') |
+        Q(address__iregex=r'[,\s]Utah(?:\s+\d{5}(?:-\d{4})?)?\s*$')
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+    out_of_state_codes = [code for code in STATE_CODES if code != 'UT']
+    state_pattern = r'[,\s](' + '|'.join(out_of_state_codes) + r')(?:\s+\d{5}(?:-\d{4})?)?\s*$'
+    compiled = re.compile(state_pattern, re.IGNORECASE)
+
+    states = {}
+    for contrib in addressed.filter(address__iregex=state_pattern).values('address', 'amount'):
+        match = compiled.search(contrib['address'])
+        if match:
+            code = match.group(1).upper()
+            states[code] = states.get(code, Decimal('0')) + (contrib['amount'] or Decimal('0'))
+
+    out_of_state_total = sum(states.values(), Decimal('0'))
+    return {
+        'utah': utah_total,
+        'states': states,
+        'out_of_state_total': out_of_state_total,
+        'readable_total': utah_total + out_of_state_total,
+    }
+
+
+def state_tiles(geography):
+    """Tile map cells for the overview page, shaded by dollars contributed."""
+    states = geography['states']
+    out_of_state_total = geography['out_of_state_total']
+    tiles = []
+    for code, row, col in STATE_TILES:
+        if code == 'UT':
+            value = geography['utah']
+            share = pct(value, geography['readable_total'])
+            note = f'home state — {share:g}% of traceable dollars'
+            color, text_color = '#0F2E2B', '#F3EFE6'
+        else:
+            value = states.get(code, Decimal('0'))
+            share = pct(value, out_of_state_total)
+            note = f'{share:g}% of all out-of-state money'
+            shade = sum(1 for threshold in STATE_MAP_BINS if float(value) >= threshold)
+            color, text_color = SAND_RAMP[shade], SAND_RAMP_TEXT[shade]
+        tiles.append({
+            'code': code,
+            'name': STATE_NAMES[code],
+            'row': row + 1,
+            'col': col + 1,
+            'value': value,
+            'note': note,
+            'color': color,
+            'text_color': text_color,
+        })
+    return tiles
+
+
 def index(request):
-    """Homepage with overview statistics."""
-    # Get year-filtered querysets
+    """Overview page: headline figures, gift sizes, top fundraisers and geography."""
     reports = get_year_filtered_reports(request)
     contributions = get_year_filtered_contributions(request)
     expenditures = get_year_filtered_expenditures(request)
 
+    contribution_totals = contributions.aggregate(total=Sum('amount'), count=Count('id'))
+    expenditure_totals = expenditures.aggregate(total=Sum('amount'), count=Count('id'))
+
     stats = {
         'total_reports': reports.count(),
-        'total_contributions': contributions.count(),
-        'total_expenditures': expenditures.count(),
-        'total_contribution_amount': contributions.aggregate(
-            total=Sum('amount')
-        )['total'] or Decimal('0'),
-        'total_expenditure_amount': expenditures.aggregate(
-            total=Sum('amount')
-        )['total'] or Decimal('0'),
+        'total_filers': reports.exclude(organization_name='').values('organization_name').distinct().count(),
+        'total_contributions': contribution_totals['count'] or 0,
+        'total_expenditures': expenditure_totals['count'] or 0,
+        'total_contribution_amount': contribution_totals['total'] or Decimal('0'),
+        'total_expenditure_amount': expenditure_totals['total'] or Decimal('0'),
     }
 
-    # Recent reports
-    recent_reports = reports[:10]
+    gift_bands = gift_size_breakdown(contributions)
+    small_gifts = gift_bands[0]
+    large_gifts = gift_bands[-1]
 
-    # Top contributors
-    top_contributors = (
-        contributions
-        .values('contributor_name')
-        .annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        )
-        .order_by('-total')[:10]
-    )
-
-    # Top recipients
-    top_recipients = (
-        expenditures
-        .values('recipient_name')
-        .annotate(
-            total=Sum('amount'),
-            count=Count('id')
-        )
-        .order_by('-total')[:10]
+    geography = contributions_by_state(contributions)
+    tiles = state_tiles(geography)
+    other_states = [code for code in geography['states'] if code != 'DC']
+    top_state = max(
+        (t for t in tiles if t['code'] != 'UT'),
+        key=lambda t: t['value'],
+        default=None,
     )
 
     context = {
         'stats': stats,
-        'recent_reports': recent_reports,
-        'top_contributors': top_contributors,
-        'top_recipients': top_recipients,
+        'small_gift_share': small_gifts['count_pct'],
+        'small_gifts_majority': round(small_gifts['count_pct']) >= 50,
+        'large_gift_count': large_gifts['count'],
+        'large_gift_share': large_gifts['dollar_pct'],
+        'gift_bands': gift_bands,
+        'fundraisers': top_fundraisers(reports),
+        'tiles': tiles,
+        'top_state_code': top_state['code'] if top_state and top_state['value'] else 'UT',
+        'in_state_cents': int(round(pct(geography['utah'], geography['readable_total']))),
+        'out_of_state_total': geography['out_of_state_total'],
+        'other_state_count': len(other_states),
+        'has_dc': 'DC' in geography['states'],
+        'unreadable_share': int(round(100 - pct(geography['readable_total'], stats['total_contribution_amount']))) if stats['total_contribution_amount'] else 0,
+        'state_map_legend': list(zip(SAND_RAMP, bin_labels(STATE_MAP_BINS))),
+        'sand_ramp': SAND_RAMP,
     }
 
     return render(request, 'disclosures/index.html', context)
@@ -360,10 +628,10 @@ def api_report_top_expenditures(request, report_id):
 
 @ratelimit(key="ip", rate="100/h", method="GET")
 def api_global_timeline(request):
-    """API endpoint for global contribution/expenditure timeline."""
-    # Monthly contributions
+    """API endpoint for global contribution/expenditure timeline, by month."""
+    # Monthly contributions (respects the ?year= filter like the pages do)
     monthly_contributions = (
-        Contribution.objects
+        get_year_filtered_contributions(request)
         .exclude(date_received=None)
         .annotate(month=TruncMonth('date_received'))
         .values('month')
@@ -373,7 +641,7 @@ def api_global_timeline(request):
 
     # Monthly expenditures
     monthly_expenditures = (
-        Expenditure.objects
+        get_year_filtered_expenditures(request)
         .exclude(date=None)
         .annotate(month=TruncMonth('date'))
         .values('month')
