@@ -113,6 +113,11 @@
             text-transform: uppercase;
         }
 
+        /* DaisyUI 4 badges have a fixed height but allow wrapping, so a long
+           label inside a squeezed table column spills above and below the
+           pill. Keep every badge on one line (DaisyUI 5 does the same). */
+        .badge { white-space: nowrap; }
+
         /* Masthead -------------------------------------------------------- */
         .masthead {
             background: var(--pine);
@@ -169,7 +174,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px 24px;
-            padding: 16px 0 0;
+            padding: 16px 0 22px;
         }
         .masthead-search {
             display: flex;
