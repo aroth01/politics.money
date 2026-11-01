@@ -1,289 +1,576 @@
 {% extends "base.html" %}
-{% load currency_filters %}
+{% load currency_filters humanize %}
 
-{% block title %}Home - Utah Campaign Finance Disclosures{% endblock %}
+{% block title %}Overview - {{ site_title }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Shared labels ------------------------------------------------------ */
+    .ov-eyebrow { font: 700 14px var(--font-condensed); letter-spacing: 0.16em; text-transform: uppercase; color: var(--pine); }
+    .masthead .ov-eyebrow { font-size: 15px; color: var(--sand-light); }
+    .ov-h2 { margin: 0; font-size: 34px; font-weight: 500; letter-spacing: -0.02em; }
+    .masthead .ov-h2 { font-size: 32px; color: #FFFFFF; }
+    .ov-sub { margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-muted); }
+    .masthead .ov-sub { color: var(--pine-text-soft); }
+    .ov-sub strong { font-weight: 600; color: var(--ink); }
+    .ov-section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 14px; }
+    .ov-section-head > div:first-child { display: flex; flex-direction: column; gap: 6px; max-width: 660px; }
+    .ov-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font: 600 14px var(--font-condensed); letter-spacing: 0.04em; color: var(--ink-muted); }
+    .ov-legend > span { display: flex; align-items: center; gap: 6px; }
+    .ov-swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+    .ov-swatch-sm { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+    .ov-swatch-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .ov-swatch-line { width: 18px; height: 2px; display: inline-block; }
+    .ov-figure-num { font-family: var(--font-condensed); font-weight: 800; line-height: 0.95; }
+
+    /* Hero and key figures (inside the masthead) ------------------------- */
+    .ov-hero { padding: 14px 0 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); gap: 28px 64px; align-items: end; }
+    .ov-hero-title { display: flex; flex-direction: column; gap: 18px; }
+    .ov-h1 { margin: 0; font-size: clamp(40px, 5.4vw, 66px); line-height: 1.02; font-weight: 500; letter-spacing: -0.025em; color: #FFFFFF; text-wrap: balance; }
+    .ov-lede { margin: 0; font-size: 21px; line-height: 1.5; color: var(--pine-text-soft); text-wrap: pretty; }
+    .ov-lede strong { font-weight: 600; color: #FFFFFF; }
+    .ov-figures { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px 56px; padding: 28px 0 8px; border-top: 1px solid var(--pine-line); }
+    .ov-figure-lead { display: flex; flex-direction: column; }
+    .ov-figure-lead .ov-figure-num { font-size: clamp(88px, 11vw, 150px); line-height: 0.82; letter-spacing: -0.02em; color: #FFFFFF; }
+    .ov-figure-lead span:last-child { font: 600 17px var(--font-condensed); letter-spacing: 0.12em; text-transform: uppercase; color: var(--sand-light); margin-top: 10px; }
+    .ov-figure-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 20px 40px; flex: 1 1 420px; padding-bottom: 6px; }
+    .ov-figure { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--pine-line); padding-left: 14px; }
+    .ov-figure span:first-child { font: 700 46px var(--font-condensed); line-height: 1; }
+    .ov-figure span:last-child { font-size: 16px; color: var(--pine-text-muted); }
+
+    /* Monthly chart ------------------------------------------------------ */
+    .ov-monthly { padding: 56px 0 28px; display: flex; flex-direction: column; gap: 16px; }
+    .masthead .ov-legend { color: var(--pine-text-soft); font-size: 15px; letter-spacing: 0.08em; gap: 18px; text-transform: uppercase; }
+    #monthly-chart { position: relative; height: 340px; margin: 18px 0 0 46px; }
+    #monthly-chart svg { position: absolute; left: 0; top: 0; overflow: visible; }
+    #monthly-chart .ov-grid { stroke: var(--pine-grid); }
+    #monthly-chart .ov-grid-base { stroke: var(--pine-axis); }
+    #monthly-chart .ov-ytick { font: 600 14px var(--font-condensed); fill: var(--pine-text-muted); }
+    #monthly-chart .ov-area { fill: rgba(207, 125, 36, 0.16); }
+    #monthly-chart .ov-line { fill: none; stroke-width: 2px; stroke-linejoin: round; }
+    #monthly-chart .ov-dot { stroke: var(--pine); stroke-width: 2px; }
+    #monthly-chart .ov-cross { stroke: var(--pine-text-muted); stroke-width: 1px; }
+    #monthly-chart .ov-hit { fill: transparent; cursor: crosshair; }
+    .ov-note { position: absolute; width: min(260px, 48%); font-family: var(--font-serif); pointer-events: none; }
+    .ov-note-left { padding-left: 12px; border-left: 1px solid var(--pine-text-muted); }
+    .ov-note-right { padding-right: 12px; border-right: 1px solid var(--pine-text-muted); text-align: right; }
+    .ov-note-title { font: 700 15px var(--font-condensed); letter-spacing: 0.06em; color: #FFFFFF; }
+    .ov-note-text { font-size: 16px; line-height: 1.35; font-style: italic; color: var(--pine-text-soft); }
+    .ov-tip { position: absolute; top: 4px; width: 196px; box-sizing: border-box; background: var(--pine-2); border: 1px solid var(--pine-line); border-radius: 8px; padding: 12px 14px; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35); pointer-events: none; display: none; flex-direction: column; gap: 6px; font-family: var(--font-condensed); }
+    .ov-tip-date { font-size: 15px; font-weight: 700; letter-spacing: 0.08em; color: #FFFFFF; }
+    .ov-tip-row { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+    .ov-tip-row span:nth-child(2) { color: var(--pine-text-muted); font-weight: 500; }
+    .ov-tip-row span:last-child { margin-left: auto; font-weight: 700; color: #FFFFFF; }
+    #monthly-years { position: relative; height: 20px; margin-left: 46px; font: 600 15px var(--font-condensed); letter-spacing: 0.08em; color: var(--pine-text-muted); }
+    #monthly-years span { position: absolute; white-space: nowrap; }
+    .ov-empty { font-size: 18px; font-style: italic; color: var(--ink-faint); }
+    .masthead .ov-empty { color: var(--pine-text-muted); }
+
+    /* Light sections ----------------------------------------------------- */
+    .ov-section { padding-top: 72px; display: flex; flex-direction: column; gap: 22px; }
+    .ov-section + .ov-section { padding-top: 80px; }
+    .ov-split { padding-top: 80px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); gap: 64px; align-items: start; }
+    .ov-split > div { display: flex; flex-direction: column; gap: 18px; }
+    .ov-split .ov-h2 { font-size: 30px; }
+    .ov-split .ov-sub { font-size: 17px; }
+
+    /* Calendar heatmap --------------------------------------------------- */
+    .ov-heat-wrap { display: flex; flex-wrap: wrap; gap: 28px 40px; align-items: stretch; }
+    .ov-heat { flex: 3 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    .ov-heat-row { display: grid; grid-template-columns: 56px repeat(12, minmax(0, 1fr)); gap: 4px; align-items: center; }
+    .ov-heat-months { font: 600 13px var(--font-condensed); letter-spacing: 0.08em; color: var(--ink-faint); text-align: center; }
+    .ov-heat-year { font: 700 22px var(--font-condensed); }
+    .ov-heat-cell { height: 58px; border: 0; padding: 0; border-radius: 6px; background: var(--rule); cursor: pointer; transition: transform 0.12s; }
+    .ov-heat-cell:hover, .ov-heat-cell:focus-visible { transform: scale(1.06); outline: none; }
+    .ov-heat-cell.is-selected { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+    .ov-panel { flex: 1 1 260px; display: flex; flex-direction: column; gap: 12px; padding: 22px 24px; background: var(--paper-raised); border-top: 3px solid var(--pine); }
+    .ov-panel-title { font: 700 14px var(--font-condensed); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); }
+    .ov-panel .ov-figure-num { font-size: 60px; }
+    .ov-panel p { margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-soft); }
+    .ov-panel-hint { margin-top: auto; font: 600 13px var(--font-condensed); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+
+    /* Gift size bands ---------------------------------------------------- */
+    .ov-bands { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 0 16px; align-items: center; font-family: var(--font-condensed); }
+    .ov-bands-label { font-size: 15px; font-weight: 700; letter-spacing: 0.08em; }
+    .ov-bar { display: flex; height: 28px; }
+    .ov-bar > div { box-sizing: border-box; border-right: 2px solid var(--paper); display: flex; align-items: center; padding-left: 8px; font-size: 15px; font-weight: 700; overflow: hidden; white-space: nowrap; }
+    .ov-bar > div:first-child { border-radius: 4px 0 0 4px; }
+    .ov-bar > div:last-child { border-right: 0; border-radius: 0 4px 4px 0; }
+    .ov-ribbon { width: 100%; height: 80px; display: block; }
+    @media (max-width: 640px) { .ov-bar > .ov-seg-narrow { font-size: 0; } }
+
+    /* Fundraisers dumbbell ----------------------------------------------- */
+    .ov-rank { position: relative; }
+    .ov-rank-grid { position: absolute; top: 0; bottom: 24px; border-left: 1px solid var(--rule); }
+    .ov-rank-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 16px; align-items: center; height: 38px; border-bottom: 1px solid var(--rule); position: relative; }
+    .ov-rank-row:hover { background: var(--paper-hover); }
+    .ov-rank-row:last-child { border-bottom-color: var(--ink); }
+    .ov-rank-name { font-size: 16px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: none !important; }
+    .ov-rank-name:hover { text-decoration: underline !important; }
+    .ov-rank-track { position: relative; height: 38px; }
+    .ov-rank-gap { position: absolute; top: 18px; height: 2px; background: var(--rule-strong); }
+    .ov-rank-dot { position: absolute; top: 19px; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--paper); }
+    .ov-rank-diff { position: absolute; top: 9px; margin-left: 12px; font: 700 15px var(--font-condensed); white-space: nowrap; }
+    .ov-rank-axis { position: relative; height: 18px; margin-top: 6px; font: 600 14px var(--font-condensed); color: var(--ink-faint); }
+    .ov-rank-axis span { position: absolute; transform: translateX(-50%); }
+    .ov-rank-axis span:last-child { right: 0; left: auto !important; transform: none; }
+
+    /* State tile map ----------------------------------------------------- */
+    .ov-map { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
+    .ov-tile { aspect-ratio: 1 / 1; border: 0; padding: 0; border-radius: 5px; display: flex; align-items: center; justify-content: center; font: 700 clamp(11px, 1.1vw, 14px) var(--font-condensed); letter-spacing: 0.04em; cursor: pointer; }
+    .ov-tile:hover, .ov-tile:focus-visible { filter: brightness(1.1); outline: none; }
+    .ov-tile.is-selected { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+    .ov-tile-detail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding: 16px 0 0; border-top: 3px solid var(--pine); }
+    .ov-tile-detail .ov-figure-num { font-size: 40px; line-height: 1; }
+    .ov-tile-note { font-size: 16px; font-style: italic; color: var(--ink-muted); }
+</style>
+{% endblock %}
+
+{% block masthead_extra %}
+<section class="ov-hero">
+    <div class="ov-hero-title">
+        <span class="ov-eyebrow">The overview{% if selected_year %} · {{ selected_year }}{% endif %}</span>
+        <h1 class="ov-h1">{% if small_gifts_majority %}Most Utah political gifts are small. Most of the money is not.{% else %}Where Utah's political money comes from, and where it goes.{% endif %}</h1>
+    </div>
+    <p class="ov-lede">{{ small_gift_share|floatformat:0 }}% of the {{ stats.total_contributions|intcomma }} contributions on file were <strong>under $50</strong>. {{ large_gift_count|intcomma }} gifts of $10,000 or more supplied <strong>{{ large_gift_share|floatformat:0 }}%</strong> of the {{ stats.total_contribution_amount|currency_short }} raised.</p>
+</section>
+
+<section aria-label="Key figures" class="ov-figures">
+    <div class="ov-figure-lead">
+        <span class="ov-figure-num">{{ stats.total_contribution_amount|currency_short }}</span>
+        <span>Raised, {% if selected_year %}{{ selected_year }} reports{% else %}all reports{% endif %}</span>
+    </div>
+    <div class="ov-figure-grid">
+        <div class="ov-figure"><span>{{ stats.total_expenditure_amount|currency_short }}</span><span>spent in {{ stats.total_expenditures|intcomma }} payments</span></div>
+        <div class="ov-figure"><span>{{ stats.total_reports|intcomma }}</span><span>disclosure reports</span></div>
+        <div class="ov-figure"><span>{{ stats.total_filers|intcomma }}</span><span>distinct filers</span></div>
+    </div>
+</section>
+
+<section class="ov-monthly">
+    <div class="ov-section-head">
+        <div>
+            <h2 class="ov-h2">The election-year surge</h2>
+            <p class="ov-sub">Money raised and spent each month<span id="monthly-range"></span>. Hover any month for its totals.</p>
+        </div>
+        <div class="ov-legend" aria-hidden="true">
+            <span><span class="ov-swatch-line" style="background: var(--sand);"></span>Raised</span>
+            <span><span class="ov-swatch-line" style="background: var(--teal);"></span>Spent</span>
+        </div>
+    </div>
+    <div id="monthly-chart">
+        <div class="ov-tip" id="monthly-tip" role="status">
+            <div class="ov-tip-date"></div>
+            <div class="ov-tip-row"><span class="ov-swatch-line" style="width: 12px; background: var(--sand);"></span><span>Raised</span><span data-raised></span></div>
+            <div class="ov-tip-row"><span class="ov-swatch-line" style="width: 12px; background: var(--teal);"></span><span>Spent</span><span data-spent></span></div>
+        </div>
+    </div>
+    <div id="monthly-years" aria-hidden="true"></div>
+</section>
+{% endblock %}
+
+{% block main_class %}pb-20{% endblock %}
 
 {% block content %}
-<div class="space-y-8">
-    <!-- Hero Section -->
-    <div class="hero bg-base-200 rounded-lg">
-        <div class="hero-content text-center py-12">
-            <div class="max-w-md">
-                <h1 class="text-5xl font-bold">Utah Campaign Finance</h1>
-                <p class="py-6">Track and analyze campaign finance disclosures from Utah political organizations</p>
-                <a href="{% url 'disclosures:reports_list' %}" class="btn btn-primary">Browse Reports</a>
+<!-- Calendar heatmap -->
+<section class="ov-section">
+    <div class="ov-section-head">
+        <div>
+            <span class="ov-eyebrow">Calendar</span>
+            <h2 class="ov-h2">When the money moves</h2>
+            <p class="ov-sub">Each square is one month of fundraising. The darkest squares mark the heaviest months, usually the run-up to a November election.</p>
+        </div>
+        <div class="ov-legend" id="heat-legend"></div>
+    </div>
+    <div class="ov-heat-wrap">
+        <div class="ov-heat">
+            <div class="ov-heat-row ov-heat-months" aria-hidden="true">
+                <span></span><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span><span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
             </div>
+            <div id="heat-grid" role="group" aria-label="Money raised by month" style="display: flex; flex-direction: column; gap: 4px;"></div>
+        </div>
+        <div class="ov-panel">
+            <span class="ov-panel-title" data-cell-title>Month</span>
+            <span class="ov-figure-num" data-cell-raised>—</span>
+            <p data-cell-sentence>Loading monthly totals…</p>
+            <span class="ov-panel-hint">Hover a month to compare</span>
         </div>
     </div>
+</section>
 
-    <!-- Stats -->
-    <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
-        <div class="stat">
-            <div class="stat-figure text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                </svg>
-            </div>
-            <div class="stat-title">Total Reports</div>
-            <div class="stat-value text-primary">{{ stats.total_reports|default:0 }}</div>
-        </div>
-
-        <div class="stat">
-            <div class="stat-figure text-secondary">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                </svg>
-            </div>
-            <div class="stat-title">Total Contributions</div>
-            <div class="stat-value text-secondary">{{ stats.total_contribution_amount|currency_int }}</div>
-            <div class="stat-desc">{{ stats.total_contributions }} transactions</div>
-        </div>
-
-        <div class="stat">
-            <div class="stat-figure text-accent">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                </svg>
-            </div>
-            <div class="stat-title">Total Expenditures</div>
-            <div class="stat-value text-accent">{{ stats.total_expenditure_amount|currency_int }}</div>
-            <div class="stat-desc">{{ stats.total_expenditures }} transactions</div>
+<!-- Gift size -->
+<section class="ov-section">
+    <div class="ov-section-head">
+        <div style="max-width: 720px;">
+            <span class="ov-eyebrow">Gift size</span>
+            <h2 class="ov-h2">The many and the few</h2>
+            <p class="ov-sub">Each band follows one gift size from its share of all contributions (top) to its share of all dollars (bottom).</p>
         </div>
     </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <!-- Recent Reports -->
-        <div class="card bg-base-200 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">Recent Reports</h2>
-                <div class="overflow-x-auto">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Title</th>
-                                <th>Balance</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for report in recent_reports %}
-                            <tr>
-                                <td>
-                                    <a href="{% url 'disclosures:report_detail' report.report_id %}" class="link link-primary">
-                                        {{ report.report_id }}
-                                    </a>
-                                </td>
-                                <td>{{ report.title|truncatechars:40 }}</td>
-                                <td class="font-mono">{{ report.ending_balance|currency }}</td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-gray-500">No reports yet</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="card-actions justify-end">
-                    <a href="{% url 'disclosures:reports_list' %}" class="btn btn-sm btn-primary">View All</a>
-                </div>
-            </div>
+    <div class="ov-legend">
+        {% for band in gift_bands %}
+        <span><span class="ov-swatch-sm" style="background: {{ band.color }};"></span>{{ band.label }}</span>
+        {% endfor %}
+    </div>
+    {% if stats.total_contributions %}
+    <div class="ov-bands">
+        <span class="ov-bands-label">GIFTS</span>
+        <div class="ov-bar" role="img" aria-label="Share of contributions: {% for band in gift_bands %}{{ band.label }} {{ band.count_pct }} percent{% if not forloop.last %}, {% endif %}{% endfor %}">
+            {% for band in gift_bands %}
+            <div {% if band.count_pct < 15 %}class="ov-seg-narrow" {% endif %}style="flex: 0 0 {{ band.count_pct }}%; background: {{ band.color }}; color: {{ band.text_color }};">{% if band.count_pct >= 4 %}{{ band.count_pct }}%{% endif %}</div>
+            {% endfor %}
         </div>
-
-        <!-- Top Contributors -->
-        <div class="card bg-base-200 shadow-xl">
-            <div class="card-body">
-                <h2 class="card-title">Top Contributors</h2>
-                <div class="overflow-x-auto">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Total</th>
-                                <th>Count</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for contributor in top_contributors %}
-                            <tr>
-                                <td>{{ contributor.contributor_name|truncatechars:30 }}</td>
-                                <td class="font-mono">{{ contributor.total|currency }}</td>
-                                <td>{{ contributor.count }}</td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-gray-500">No data yet</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="card-actions justify-end">
-                    <a href="{% url 'disclosures:contributors_list' %}" class="btn btn-sm btn-primary">View All</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Top Recipients -->
-        <div class="card bg-base-200 shadow-xl lg:col-span-2">
-            <div class="card-body">
-                <h2 class="card-title">Top Expenditure Recipients</h2>
-                <div class="overflow-x-auto">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Recipient</th>
-                                <th>Total Amount</th>
-                                <th>Transaction Count</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for recipient in top_recipients %}
-                            <tr>
-                                <td>{{ recipient.recipient_name }}</td>
-                                <td class="font-mono">{{ recipient.total|currency }}</td>
-                                <td>{{ recipient.count }}</td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-gray-500">No data yet</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="card-actions justify-end">
-                    <a href="{% url 'disclosures:expenditures_list' %}" class="btn btn-sm btn-primary">View All</a>
-                </div>
-            </div>
+        <span></span>
+        <svg class="ov-ribbon" viewBox="0 0 1000 80" preserveAspectRatio="none" aria-hidden="true">
+            {% for band in gift_bands %}
+            <polygon points="{{ band.ribbon_points }}" style="fill: {{ band.color }}; fill-opacity: 0.3;"></polygon>
+            {% endfor %}
+        </svg>
+        <span class="ov-bands-label">DOLLARS</span>
+        <div class="ov-bar" role="img" aria-label="Share of dollars: {% for band in gift_bands %}{{ band.label }} {{ band.dollar_pct }} percent{% if not forloop.last %}, {% endif %}{% endfor %}">
+            {% for band in gift_bands %}
+            <div {% if band.dollar_pct < 15 %}class="ov-seg-narrow" {% endif %}style="flex: 0 0 {{ band.dollar_pct }}%; background: {{ band.color }}; color: {{ band.text_color }};">{% if band.dollar_pct >= 4 %}{{ band.dollar_pct }}%{% endif %}</div>
+            {% endfor %}
         </div>
     </div>
+    {% else %}
+    <p class="ov-empty">No contributions on file yet.</p>
+    {% endif %}
+</section>
 
-    <!-- Global Timeline Chart -->
-    <div class="card bg-base-200 shadow-xl">
-        <div class="card-body">
-            <h2 class="card-title">Contributions & Expenditures Over Time</h2>
-            <div id="global-timeline-chart" class="chart-container"></div>
+<section class="ov-split">
+    <!-- Fundraisers -->
+    <div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+            <span class="ov-eyebrow">Fundraisers</span>
+            <h2 class="ov-h2">Raised, then spent</h2>
+            <p class="ov-sub">The ten biggest fundraisers, with what each spent on the same scale.{% if fundraisers.biggest_overspend %} {{ fundraisers.biggest_overspend.name }} spent {{ fundraisers.biggest_overspend.diff|currency_short }} more than it raised.{% endif %}</p>
         </div>
+        <div class="ov-legend" style="gap: 18px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink);">
+            <span><span class="ov-swatch-dot" style="background: var(--sand-deep);"></span>Raised</span>
+            <span><span class="ov-swatch-dot" style="background: var(--teal-deep);"></span>Spent</span>
+        </div>
+        {% if fundraisers.rows %}
+        <div class="ov-rank">
+            {% for tick in fundraisers.ticks %}{% if not forloop.first and not forloop.last %}
+            <div aria-hidden="true" class="ov-rank-grid" style="left: calc(186px + (100% - 186px) * {{ tick.frac }});"></div>
+            {% endif %}{% endfor %}
+            <div role="list" style="position: relative; display: flex; flex-direction: column;">
+                {% for filer in fundraisers.rows %}
+                <div role="listitem" class="ov-rank-row" title="Raised {{ filer.raised|currency_int }} · Spent {{ filer.spent|currency_int }}">
+                    {% if filer.detail_url_name %}
+                    <a class="ov-rank-name" href="{% url filer.detail_url_name filer.name %}">{{ filer.name }}</a>
+                    {% else %}
+                    <a class="ov-rank-name" href="{% url 'disclosures:reports_list' %}?search={{ filer.name|urlencode }}">{{ filer.name }}</a>
+                    {% endif %}
+                    <div class="ov-rank-track" aria-hidden="true">
+                        {% if filer.gap_width > 1 %}<div class="ov-rank-gap" style="left: {{ filer.gap_left }}%; width: {{ filer.gap_width }}%;"></div>{% endif %}
+                        <div class="ov-rank-dot" style="left: {{ filer.raised_pct }}%; background: var(--sand-deep);"></div>
+                        <div class="ov-rank-dot" style="left: {{ filer.spent_pct }}%; background: var(--teal-deep);"></div>
+                        {% if filer.show_diff %}<span class="ov-rank-diff" style="left: {% if filer.spent_pct > filer.raised_pct %}{{ filer.spent_pct }}{% else %}{{ filer.raised_pct }}{% endif %}%;">{{ filer.diff|signed_currency_short }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div aria-hidden="true" class="ov-rank-axis">
+                {% for tick in fundraisers.ticks %}
+                <span style="left: calc(186px + (100% - 186px) * {{ tick.frac }});">{{ tick.value|currency_short:"auto" }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <p class="ov-empty">No reports on file yet.</p>
+        {% endif %}
     </div>
-</div>
+
+    <!-- Geography -->
+    <div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+            <span class="ov-eyebrow">Geography</span>
+            <h2 class="ov-h2">Money from beyond Utah</h2>
+            <p class="ov-sub">Of every dollar with a readable address, <strong>{{ in_state_cents }} cents</strong> came from inside the state. The rest — {{ out_of_state_total|currency_short:2 }} — came from {{ other_state_count }} other state{{ other_state_count|pluralize }}{% if has_dc %} and D.C.{% endif %}</p>
+        </div>
+        <div class="ov-map" id="state-map" role="group" aria-label="Contributions from each state">
+            {% for tile in tiles %}
+            <button type="button" class="ov-tile{% if tile.code == top_state_code %} is-selected{% endif %}"
+                    style="grid-row: {{ tile.row }}; grid-column: {{ tile.col }}; background: {{ tile.color }}; color: {{ tile.text_color }};"
+                    aria-label="{{ tile.name }}: {{ tile.value|currency_int }}"
+                    data-code="{{ tile.code }}" data-name="{{ tile.name }}" data-value="{{ tile.value|currency_int }}" data-note="{{ tile.note }}">{{ tile.code }}</button>
+            {% endfor %}
+        </div>
+        <div class="ov-legend">
+            {% for color, label in state_map_legend %}
+            <span><span class="ov-swatch" style="background: {{ color }};"></span>{{ label }}</span>
+            {% endfor %}
+            <span><span class="ov-swatch" style="background: var(--pine);"></span>Utah</span>
+        </div>
+        <div class="ov-tile-detail" aria-live="polite">
+            <span class="ov-panel-title" data-tile-name></span>
+            <span class="ov-figure-num" data-tile-value></span>
+            <span class="ov-tile-note" data-tile-note></span>
+        </div>
+        {% if unreadable_share > 0 %}
+        <p class="ov-sub" style="font-size: 15px; color: var(--ink-faint);">About {{ unreadable_share }}% of dollars have no readable state and are left out of the in-state share.</p>
+        {% endif %}
+    </div>
+</section>
 {% endblock %}
 
 {% block extra_scripts %}
+{{ sand_ramp|json_script:"sand-ramp" }}
 <script>
-// Fetch global timeline data and render chart
-fetch('{% url "disclosures:api_global_timeline" %}')
-    .then(response => response.json())
-    .then(data => {
-        renderTimelineChart('global-timeline-chart', data);
+(function () {
+    const SAND = JSON.parse(document.getElementById('sand-ramp').textContent);
+    const TIMELINE_URL = '{% url "disclosures:api_global_timeline" %}{% if selected_year %}?year={{ selected_year }}{% endif %}';
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const SHORT = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+    function money(v) {
+        const abs = Math.abs(v);
+        if (abs >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+        if (abs >= 1e3) return '$' + Math.round(v / 1e3) + 'K';
+        return '$' + Math.round(v);
+    }
+    function axisMoney(v) {
+        if (v === 0) return '$0';
+        return '$' + d3.format('~s')(v).replace('k', 'K').replace('G', 'B');
+    }
+    function rangeLabel(lo, hi) {
+        const a = axisMoney(lo), b = axisMoney(hi);
+        const unit = b.slice(-1);
+        if (/[KM]/.test(unit) && a.slice(-1) === unit) return a.slice(0, -1) + '–' + b.slice(1);
+        return a + '–' + b;
+    }
+    function monthLabel(d) { return SHORT[d.getMonth()] + ' ' + d.getFullYear(); }
+
+    // ---- State tile map -------------------------------------------------
+    const map = document.getElementById('state-map');
+    const tiles = Array.from(map.querySelectorAll('.ov-tile'));
+    const defaultTile = map.querySelector('.ov-tile.is-selected') || tiles[0];
+    function pickTile(tile) {
+        tiles.forEach(t => t.classList.toggle('is-selected', t === tile));
+        document.querySelector('[data-tile-name]').textContent = tile.dataset.name.toUpperCase();
+        document.querySelector('[data-tile-value]').textContent = tile.dataset.value;
+        document.querySelector('[data-tile-note]').textContent = tile.dataset.note;
+    }
+    tiles.forEach(t => {
+        t.addEventListener('mouseenter', () => pickTile(t));
+        t.addEventListener('focus', () => pickTile(t));
     });
+    map.addEventListener('mouseleave', () => pickTile(defaultTile));
+    if (defaultTile) pickTile(defaultTile);
 
-function renderTimelineChart(elementId, data) {
-    const container = document.getElementById(elementId);
-    if (!container) return;
+    // ---- Monthly series ---------------------------------------------------
+    let series = [];
+    const chart = document.getElementById('monthly-chart');
+    const tip = document.getElementById('monthly-tip');
+    const yearsRow = document.getElementById('monthly-years');
 
-    // Simple D3 line chart
-    const margin = {top: 20, right: 80, bottom: 30, left: 60};
-    const width = container.offsetWidth - margin.left - margin.right;
-    const height = 400 - margin.top - margin.bottom;
+    fetch(TIMELINE_URL)
+        .then(r => r.json())
+        .then(data => {
+            series = buildSeries(data);
+            if (!series.length) {
+                chart.innerHTML = '<p class="ov-empty">No dated contributions or payments yet.</p>';
+                document.getElementById('heat-grid').innerHTML = '<p class="ov-empty">No monthly data to show.</p>';
+                document.querySelector('[data-cell-sentence]').textContent = 'Monthly totals appear once dated reports are imported.';
+                return;
+            }
+            const first = series[0].date, last = series[series.length - 1].date;
+            document.getElementById('monthly-range').textContent =
+                first.getFullYear() === last.getFullYear() ? ', ' + first.getFullYear() : ', ' + first.getFullYear() + '–' + last.getFullYear();
+            renderMonthly();
+            renderHeatmap();
+            let timer;
+            window.addEventListener('resize', () => { clearTimeout(timer); timer = setTimeout(renderMonthly, 150); });
+        })
+        .catch(() => { chart.innerHTML = '<p class="ov-empty">Monthly totals could not be loaded.</p>'; });
 
-    const svg = d3.select('#' + elementId)
-        .append('svg')
-        .attr('width', width + margin.left + margin.right)
-        .attr('height', height + margin.top + margin.bottom)
-        .append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
-
-    // Parse dates
-    const parseDate = d3.timeParse('%Y-%m-%d');
-    data.contributions.forEach(d => d.date = parseDate(d.date));
-    data.expenditures.forEach(d => d.date = parseDate(d.date));
-
-    // Combine all dates to get domain
-    const allDates = [...data.contributions.map(d => d.date), ...data.expenditures.map(d => d.date)];
-    const allAmounts = [...data.contributions.map(d => d.amount), ...data.expenditures.map(d => d.amount)];
-
-    // Scales
-    const x = d3.scaleTime()
-        .domain(d3.extent(allDates))
-        .range([0, width]);
-
-    const y = d3.scaleLinear()
-        .domain([0, d3.max(allAmounts)])
-        .nice()
-        .range([height, 0]);
-
-    // Line generators
-    const contributionLine = d3.line()
-        .x(d => x(d.date))
-        .y(d => y(d.amount));
-
-    const expenditureLine = d3.line()
-        .x(d => x(d.date))
-        .y(d => y(d.amount));
-
-    // Grid lines
-    svg.append('g')
-        .attr('class', 'grid')
-        .attr('opacity', 0.1)
-        .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
-
-    // Axes
-    svg.append('g')
-        .attr('transform', `translate(0,${height})`)
-        .call(d3.axisBottom(x));
-
-    svg.append('g')
-        .call(d3.axisLeft(y).tickFormat(d => '$' + d3.format('.2s')(d)));
-
-    // Lines
-    if (data.contributions.length > 0) {
-        svg.append('path')
-            .datum(data.contributions)
-            .attr('fill', 'none')
-            .attr('stroke', '#3b82f6')
-            .attr('stroke-width', 2)
-            .attr('d', contributionLine);
+    function buildSeries(data) {
+        const parse = d3.timeParse('%Y-%m-%d');
+        const byMonth = new Map();
+        function fold(list, key) {
+            (list || []).forEach(d => {
+                const date = parse(d.date);
+                if (!date) return;
+                const k = date.getFullYear() * 12 + date.getMonth();
+                const row = byMonth.get(k) || { date: new Date(date.getFullYear(), date.getMonth(), 1), raised: 0, spent: 0, count: 0 };
+                row[key] += d.amount;
+                if (key === 'raised') row.count += d.count;
+                byMonth.set(k, row);
+            });
+        }
+        fold(data.contributions, 'raised');
+        fold(data.expenditures, 'spent');
+        if (!byMonth.size) return [];
+        const keys = Array.from(byMonth.keys()).sort((a, b) => a - b);
+        const out = [];
+        for (let k = keys[0]; k <= keys[keys.length - 1]; k++) {
+            out.push(byMonth.get(k) || { date: new Date(Math.floor(k / 12), k % 12, 1), raised: 0, spent: 0, count: 0 });
+        }
+        return out;
     }
 
-    if (data.expenditures.length > 0) {
-        svg.append('path')
-            .datum(data.expenditures)
-            .attr('fill', 'none')
-            .attr('stroke', '#ef4444')
-            .attr('stroke-width', 2)
-            .attr('d', expenditureLine);
+    // ---- Monthly chart ----------------------------------------------------
+    function renderMonthly() {
+        chart.querySelectorAll('svg, .ov-note').forEach(el => el.remove());
+        yearsRow.innerHTML = '';
+        const width = chart.clientWidth, height = chart.clientHeight;
+        const x = d3.scaleTime().domain([series[0].date, series[series.length - 1].date]).range([0, width]);
+        const yMax = d3.max(series, d => Math.max(d.raised, d.spent)) || 1;
+        const y = d3.scaleLinear().domain([0, yMax]).nice(3).range([height, 0]);
+        const svg = d3.select(chart).insert('svg', ':first-child').attr('width', width).attr('height', height);
+
+        const ticks = y.ticks(3);
+        svg.selectAll('.ov-grid').data(ticks).join('line')
+            .attr('class', d => d === 0 ? 'ov-grid ov-grid-base' : 'ov-grid')
+            .attr('x1', 0).attr('x2', width).attr('y1', d => y(d)).attr('y2', d => y(d));
+        svg.selectAll('.ov-ytick').data(ticks).join('text')
+            .attr('class', 'ov-ytick').attr('x', -8).attr('y', d => y(d)).attr('dy', '0.35em').attr('text-anchor', 'end')
+            .text(axisMoney);
+
+        const line = key => d3.line().x(d => x(d.date)).y(d => y(d[key])).curve(d3.curveMonotoneX);
+        svg.append('path').datum(series).attr('class', 'ov-area')
+            .attr('d', d3.area().x(d => x(d.date)).y0(height).y1(d => y(d.raised)).curve(d3.curveMonotoneX));
+        svg.append('path').datum(series).attr('class', 'ov-line').attr('stroke', getComputedStyle(document.documentElement).getPropertyValue('--teal')).attr('d', line('spent'));
+        svg.append('path').datum(series).attr('class', 'ov-line').attr('stroke', getComputedStyle(document.documentElement).getPropertyValue('--sand')).attr('d', line('raised'));
+
+        // Axis labels: years, or months when the range is short.
+        const span = series.length;
+        const labelDates = span <= 24 ? series.map(d => d.date) : d3.timeYear.range(d3.timeYear.ceil(series[0].date), d3.timeMonth.offset(series[series.length - 1].date, 1));
+        if (span > 24 && series[0].date.getMonth() === 0) labelDates.unshift(series[0].date);
+        const fmt = span <= 24 ? d => SHORT[d.getMonth()] : d => d.getFullYear();
+        labelDates.forEach((d, i) => {
+            if (span <= 24 && span > 12 && i % 2) return;
+            const s = document.createElement('span');
+            s.style.left = (x(d) / width * 100) + '%';
+            s.textContent = fmt(d);
+            yearsRow.appendChild(s);
+        });
+
+        // Annotations shown when nothing is hovered: peak spending and peak fundraising.
+        const peakSpent = d3.maxIndex(series, d => d.spent);
+        const peakRaised = d3.maxIndex(series, d => d.raised);
+        const annotations = svg.append('g').attr('class', 'ov-annotations');
+        const notes = [];
+        function note(i, key, color, title, text, top) {
+            const d = series[i];
+            annotations.append('circle').attr('class', 'ov-dot').attr('r', 5).attr('cx', x(d.date)).attr('cy', y(d[key])).attr('fill', color);
+            const box = document.createElement('div');
+            const onLeft = x(d.date) < width / 2;
+            box.className = 'ov-note ' + (onLeft ? 'ov-note-left' : 'ov-note-right');
+            box.style.top = top;
+            if (onLeft) box.style.left = (x(d.date) + 16) + 'px'; else box.style.right = (width - x(d.date) + 16) + 'px';
+            box.innerHTML = '<div class="ov-note-title"></div><div class="ov-note-text"></div>';
+            box.querySelector('.ov-note-title').textContent = title;
+            box.querySelector('.ov-note-text').textContent = text;
+            chart.appendChild(box);
+            notes.push(box);
+        }
+        const teal = getComputedStyle(document.documentElement).getPropertyValue('--teal');
+        const sand = getComputedStyle(document.documentElement).getPropertyValue('--sand');
+        if (peakSpent === peakRaised) {
+            note(peakSpent, 'raised', sand, monthLabel(series[peakSpent].date) + ' · ' + money(series[peakSpent].raised) + ' RAISED', 'The biggest month for both fundraising and spending.', '2%');
+        } else {
+            note(peakSpent, 'spent', teal, monthLabel(series[peakSpent].date) + ' · ' + money(series[peakSpent].spent) + ' SPENT', 'The most spent in any month.', '2%');
+            note(peakRaised, 'raised', sand, monthLabel(series[peakRaised].date) + ' · ' + money(series[peakRaised].raised) + ' RAISED', 'The biggest fundraising month in the records.', '25%');
+        }
+
+        // Hover: crosshair, dots and tooltip.
+        const hover = svg.append('g').style('display', 'none');
+        hover.append('line').attr('class', 'ov-cross').attr('y1', 0).attr('y2', height);
+        const dotS = hover.append('circle').attr('class', 'ov-dot').attr('r', 5).attr('fill', teal);
+        const dotR = hover.append('circle').attr('class', 'ov-dot').attr('r', 5).attr('fill', sand);
+        const bisect = d3.bisector(d => d.date).center;
+        svg.append('rect').attr('class', 'ov-hit').attr('width', width).attr('height', height)
+            .on('mousemove', (event) => {
+                const i = bisect(series, x.invert(d3.pointer(event)[0]));
+                const d = series[i], px = x(d.date);
+                hover.style('display', null);
+                hover.select('line').attr('x1', px).attr('x2', px);
+                dotS.attr('cx', px).attr('cy', y(d.spent));
+                dotR.attr('cx', px).attr('cy', y(d.raised));
+                annotations.style('display', 'none');
+                notes.forEach(n => n.style.display = 'none');
+                tip.style.display = 'flex';
+                tip.style.left = px + 'px';
+                tip.style.transform = px > width * 0.6 ? 'translateX(calc(-100% - 14px))' : 'translateX(14px)';
+                tip.querySelector('.ov-tip-date').textContent = monthLabel(d.date);
+                tip.querySelector('[data-raised]').textContent = money(d.raised);
+                tip.querySelector('[data-spent]').textContent = money(d.spent);
+            })
+            .on('mouseleave', () => {
+                hover.style('display', 'none');
+                annotations.style('display', null);
+                notes.forEach(n => n.style.display = '');
+                tip.style.display = 'none';
+            });
     }
 
-    // Legend
-    const legend = svg.append('g')
-        .attr('transform', `translate(${width - 100}, 0)`);
+    // ---- Calendar heatmap -------------------------------------------------
+    function renderHeatmap() {
+        const grid = document.getElementById('heat-grid');
+        const legend = document.getElementById('heat-legend');
+        const maxRaised = d3.max(series, d => d.raised) || 0;
+        let thresholds = d3.ticks(0, maxRaised, 5).filter(t => t > 0 && t < maxRaised);
+        if (!thresholds.length && maxRaised > 0) thresholds = [maxRaised / 2];
+        const bins = thresholds.length + 1;
+        const colors = d3.range(bins).map(i => SAND[bins === 1 ? 0 : Math.round(i * (SAND.length - 1) / (bins - 1))]);
+        const color = d3.scaleThreshold().domain(thresholds).range(colors);
 
-    legend.append('rect')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', 10)
-        .attr('height', 10)
-        .attr('fill', '#3b82f6');
+        legend.innerHTML = '';
+        colors.forEach((c, i) => {
+            const lo = i === 0 ? null : thresholds[i - 1], hi = i < thresholds.length ? thresholds[i] : null;
+            const label = lo === null ? '< ' + axisMoney(hi) : hi === null ? axisMoney(lo) + '+' : rangeLabel(lo, hi);
+            const item = document.createElement('span');
+            item.innerHTML = '<span class="ov-swatch"></span>';
+            item.firstChild.style.background = c;
+            item.appendChild(document.createTextNode(label));
+            legend.appendChild(item);
+        });
 
-    legend.append('text')
-        .attr('x', 15)
-        .attr('y', 10)
-        .text('Contributions')
-        .style('font-size', '12px');
+        const byKey = new Map(series.map(d => [d.date.getFullYear() * 12 + d.date.getMonth(), d]));
+        const years = Array.from(new Set(series.map(d => d.date.getFullYear()))).sort();
+        const peak = series[d3.maxIndex(series, d => d.raised)];
+        let selectedCell = null;
 
-    legend.append('rect')
-        .attr('x', 0)
-        .attr('y', 20)
-        .attr('width', 10)
-        .attr('height', 10)
-        .attr('fill', '#ef4444');
+        function select(cell, d) {
+            if (selectedCell) selectedCell.classList.remove('is-selected');
+            selectedCell = cell;
+            if (cell) cell.classList.add('is-selected');
+            document.querySelector('[data-cell-title]').textContent = (MONTHS[d.date.getMonth()] + ' ' + d.date.getFullYear()).toUpperCase();
+            document.querySelector('[data-cell-raised]').textContent = money(d.raised);
+            document.querySelector('[data-cell-sentence]').textContent = d.count
+                ? 'raised from ' + d.count.toLocaleString('en-US') + ' gifts, averaging $' + Math.round(d.raised / d.count).toLocaleString('en-US') + '. Filers spent ' + money(d.spent) + ' the same month.'
+                : 'No dated contributions this month. Filers spent ' + money(d.spent) + '.';
+        }
 
-    legend.append('text')
-        .attr('x', 15)
-        .attr('y', 30)
-        .text('Expenditures')
-        .style('font-size', '12px');
-}
+        grid.innerHTML = '';
+        let peakCell = null;
+        years.forEach(year => {
+            const row = document.createElement('div');
+            row.className = 'ov-heat-row';
+            const label = document.createElement('span');
+            label.className = 'ov-heat-year';
+            label.textContent = year;
+            row.appendChild(label);
+            for (let m = 0; m < 12; m++) {
+                const d = byKey.get(year * 12 + m) || { date: new Date(year, m, 1), raised: 0, spent: 0, count: 0, missing: true };
+                const cell = document.createElement('button');
+                cell.type = 'button';
+                cell.className = 'ov-heat-cell';
+                cell.setAttribute('aria-label', MONTHS[m] + ' ' + year + ': ' + (d.missing ? 'no data' : money(d.raised) + ' raised'));
+                if (!d.missing) cell.style.background = color(d.raised);
+                cell.addEventListener('mouseenter', () => select(cell, d));
+                cell.addEventListener('focus', () => select(cell, d));
+                if (d === peak) peakCell = cell;
+                row.appendChild(cell);
+            }
+            grid.appendChild(row);
+        });
+        grid.addEventListener('mouseleave', () => select(peakCell, peak));
+        select(peakCell, peak);
+    }
+})();
 </script>
 {% endblock %}

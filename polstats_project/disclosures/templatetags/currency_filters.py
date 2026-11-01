@@ -112,3 +112,43 @@ def city_state(address):
         return f"{state}"
 
     return f"{city}, {state}"
+
+
+@register.filter
+def currency_short(value, decimals=1):
+    """
+    Format a number as a compact dollar figure for headlines and axes.
+    Example: 64512345 -> $64.5M, 450123 -> $450K, 812 -> $812
+    Pass "auto" as the argument to trim trailing zeros for axis labels:
+    1000000 -> $1M, 2500000 -> $2.5M
+    """
+    trim = decimals == 'auto'
+    try:
+        number = float(value or 0)
+        decimals = 2 if trim else int(decimals)
+    except (ValueError, TypeError):
+        return '$0'
+
+    sign = '-' if number < 0 else ''
+    number = abs(number)
+    if number >= 1_000_000:
+        text = f'{number / 1_000_000:,.{decimals}f}'
+        if trim and '.' in text:
+            text = text.rstrip('0').rstrip('.')
+        return f'{sign}${text}M'
+    if number >= 1_000:
+        return f'{sign}${number / 1_000:,.0f}K'
+    return f'{sign}${number:,.0f}'
+
+
+@register.filter
+def signed_currency_short(value):
+    """Compact dollar figure with an explicit sign, for differences: +$1.1M, −$250K."""
+    try:
+        number = float(value or 0)
+    except (ValueError, TypeError):
+        return '$0'
+    text = currency_short(abs(number))
+    if number < 0:
+        return '−' + text
+    return '+' + text

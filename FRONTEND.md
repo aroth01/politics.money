@@ -2,22 +2,31 @@
 
 The Utah Campaign Finance Disclosures application features a modern, responsive web interface built with:
 
-- **DaisyUI** - Beautiful, accessible UI components based on Tailwind CSS
+- **DaisyUI** - Accessible UI components based on Tailwind CSS, themed to the site palette (`data-theme="ledger"` in `base.html`)
 - **D3.js** - Interactive data visualizations
 - **Responsive Design** - Works on desktop, tablet, and mobile devices
 
+The look follows the "Ledger × Canyon" design: a deep pine masthead with a double-rule title bar and
+condensed uppercase navigation, year filter chips, a cream paper body set in Newsreader with Barlow
+Condensed labels and figures, a sand/rust sequential ramp for quantities, and a "How we count" footer.
+
 ## Pages Overview
 
-### 1. Homepage (`/`)
+### 1. Overview (`/`)
 
-The homepage provides an at-a-glance overview of the entire dataset:
+The homepage is an editorial overview of the whole dataset (or of one year when a year chip is selected):
 
 **Features:**
-- **Statistics Cards**: Total reports, contributions amount, expenditures amount
-- **Recent Reports Table**: Latest 10 disclosure reports
-- **Top Contributors**: Top 10 contributors by total amount
-- **Top Recipients**: Top 10 expenditure recipients
-- **Global Timeline Chart**: Line chart showing contributions and expenditures over time (monthly aggregation)
+- **Headline and lede**: Share of gifts under $50 and the share of dollars from gifts of $10,000 or more
+- **Key figures**: Total raised, total spent with payment count, report count, distinct filers
+- **The election-year surge**: Monthly raised/spent line chart with hover tooltip and peak-month annotations
+- **When the money moves**: Calendar heatmap of monthly fundraising with a detail panel on hover
+- **The many and the few**: Share of contributions vs. share of dollars in five gift size bands
+- **Raised, then spent**: Dumbbell chart of the ten biggest fundraisers, linked to their detail pages
+- **Money from beyond Utah**: Tile map of contributions by state with in-state share and a hover detail
+
+The monthly chart and heatmap load from `/api/global/timeline/` (which honours `?year=`); everything
+else is aggregated in `views.index` and rendered server-side.
 
 **URL:** http://localhost:8000/
 
@@ -119,17 +128,20 @@ Aggregated view of all expenditure recipients:
 
 ### Color Palette
 
-- **Primary**: Blue (`#3b82f6`) - Used for contributions, primary actions
-- **Secondary**: Various DaisyUI theme colors
-- **Success/Green**: Used for positive values (contributions)
-- **Error/Red**: Used for expenditures
-- **Base Colors**: DaisyUI neutral palette for backgrounds and text
+Defined as CSS custom properties in `base.html` and mirrored in the `ledger` DaisyUI theme:
+
+- **Pine** (`#0F2E2B`) - Masthead, footer, primary buttons and links; Utah on the map
+- **Paper** (`#F4F2ED` / `#FBFAF7`) - Page and panel backgrounds
+- **Sand → Rust ramp** (`#DE9A60` → `#7B2815`) - Sequential shading for heatmaps, bands and the tile map
+- **Sand** (`#CF7D24`) - Money raised, the active year chip
+- **Teal** (`#35A7A1` / `#0D9293`) - Money spent, success values
+- **Ink** (`#1B2423`) with muted greys for secondary text
 
 ### Typography
 
-- **Headers**: Bold, large font sizes (text-4xl for h1)
-- **Body**: Standard readable font size
-- **Monospace**: Used for monetary values and IDs for clarity
+- **Newsreader** (serif) - Body text and headlines
+- **Barlow Condensed** - Kickers, navigation, chips, axis labels and big figures
+- **Monospace**: Used for monetary values and IDs in tables
 
 ### Components
 
@@ -188,13 +200,10 @@ The frontend consumes JSON API endpoints for chart data:
 
 ### Changing the Theme
 
-DaisyUI supports multiple themes. To change the theme, edit `base.html`:
-
-```html
-<html lang="en" data-theme="dark">  <!-- Change to: dark, cupcake, cyberpunk, etc. -->
-```
-
-Available themes: light, dark, cupcake, bumblebee, emerald, corporate, synthwave, retro, cyberpunk, valentine, halloween, garden, forest, aqua, lofi, pastel, fantasy, wireframe, black, luxury, dracula
+The site uses a custom DaisyUI theme named `ledger`, defined as oklch variables in `base.html`
+alongside the CSS custom properties (`--pine`, `--sand`, `--paper`, ...). Change the colors there to
+restyle both the custom chrome and the DaisyUI components on the inner pages. The masthead, footer
+and overview page use the custom properties directly.
 
 ### Adding New Charts
 
